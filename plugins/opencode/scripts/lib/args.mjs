@@ -40,6 +40,10 @@ export function parseArgs(argv, schema = {}) {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+    if (arg === "--") {
+      positional.push(...argv.slice(i + 1));
+      break;
+    }
     if (!arg.startsWith("--")) {
       positional.push(arg);
       continue;
@@ -47,9 +51,9 @@ export function parseArgs(argv, schema = {}) {
     const key = arg.slice(2);
     if (valueSet.has(key)) {
       options[key] = argv[++i] ?? "";
-    } else if (boolSet.has(key) || !valueSet.has(key)) {
+    } else if (boolSet.has(key)) {
       options[key] = true;
-    }
+    } else positional.push(arg);
   }
 
   return { options, positional };
@@ -63,22 +67,5 @@ export function parseArgs(argv, schema = {}) {
  * @returns {string}
  */
 export function extractTaskText(argv, flagsWithValue = [], booleanFlags = []) {
-  const valSet = new Set(flagsWithValue);
-  const boolSet = new Set(booleanFlags);
-  const parts = [];
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      if (valSet.has(key)) {
-        i++; // skip value
-      }
-      // skip boolean flags silently
-      continue;
-    }
-    parts.push(arg);
-  }
-
-  return parts.join(" ").trim();
+  return parseArgs(argv, { valueOptions: flagsWithValue, booleanOptions: booleanFlags }).positional.join(" ").trim();
 }

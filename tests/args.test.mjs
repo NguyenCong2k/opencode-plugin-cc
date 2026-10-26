@@ -18,6 +18,13 @@ describe("stdin arguments", () => {
 });
 
 describe("parseArgs", () => {
+  it("preserves unknown task flags and honors the end-of-options delimiter", () => {
+    assert.deepEqual(parseArgs(["explain", "the", "--verbose", "flag"], { booleanOptions: ["wait"] }), { options: {}, positional: ["explain", "the", "--verbose", "flag"] });
+    const argv = ["--wait", "--", "explain", "--model", "--wait"];
+    assert.deepEqual(parseArgs(argv, { booleanOptions: ["wait"], valueOptions: ["model"] }), { options: { wait: true }, positional: ["explain", "--model", "--wait"] });
+    assert.equal(extractTaskText(argv, ["model"], ["wait"]), "explain --model --wait");
+    assert.equal(extractTaskText(["explain", "--verbose", "flag"]), "explain --verbose flag");
+  });
   it("parses value options", () => {
     const { options } = parseArgs(["--base", "main", "--scope", "branch"], {
       valueOptions: ["base", "scope"],
