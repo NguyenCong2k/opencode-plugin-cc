@@ -881,7 +881,7 @@ async function handleDoctor(argv) {
     push("opencode-server", "PASS", `${server.url} (API v${server.apiVersion})`, null);
   } else {
     push("opencode-server", "WARN", "not reachable",
-      majorVersion >= 2 ? "Start it: opencode service start" : "Start it: opencode serve --port 4096 &");
+      majorVersion >= 2 ? "Start it: opencode service start, or task --standalone" : "Start it: opencode serve --port <configured-port>");
   }
 
   // 5. CLAUDE_PLUGIN_DATA sanity check

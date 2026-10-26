@@ -7,12 +7,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { ensureOpencodeConfig } from "./opencode-config.mjs";
+import { readOpencodeConfig } from "./opencode-config.mjs";
 import { classifyError } from "./errors.mjs";
 import { spawnCommand, runCommandSync } from "./process.mjs";
 
 const IS_WINDOWS = process.platform === "win32";
-const DEFAULT_PORT = 4096;
+const DEFAULT_PORT = 0;
 const DEFAULT_HOST = "127.0.0.1";
 const SERVER_START_TIMEOUT = 30_000;
 
@@ -106,13 +106,14 @@ export async function findRunningServer(opts = {}) {
       });
     }
 
-    const host = opts.host ?? DEFAULT_HOST;
-    const port = opts.port ?? DEFAULT_PORT;
-    candidates.push({
+    const config = readOpencodeConfig().data;
+    const host = opts.host ?? config.server?.hostname ?? DEFAULT_HOST;
+    const port = opts.port ?? Number(process.env.OPENCODE_SERVER_PORT || config.server?.port || 0);
+    if (port) candidates.push({
       url: `http://${host}:${port}`,
       password: envPassword,
       username,
-      source: "fixed-port",
+      source: "configured-port",
     });
   }
 
@@ -284,9 +285,10 @@ export async function isServerRunning(host = DEFAULT_HOST, port = DEFAULT_PORT) 
  * @returns {Promise<{ url: string, pid?: number, alreadyRunning: boolean }>}
  */
 export async function ensureServer(opts = {}) {
-  const host = opts.host ?? DEFAULT_HOST;
-  const port = opts.port ?? DEFAULT_PORT;
-  const url = `http://${host}:${port}`;
+  const config = readOpencodeConfig().data;
+  const host = opts.host ?? config.server?.hostname ?? DEFAULT_HOST;
+  const port = opts.port ?? Number(process.env.OPENCODE_SERVER_PORT || config.server?.port || 0);
+  let url = `http://${host}:${port}`;
 
   const running = await findRunningServer({
     host,
@@ -319,25 +321,26 @@ export async function ensureServer(opts = {}) {
     throw new Error(`OpenCode 2 managed service failed to start within ${SERVER_START_TIMEOUT / 1000}s`);
   }
 
-  // OpenCode 1 headless mode needs explicit non-interactive permissions.
-  try {
-    ensureOpencodeConfig();
-  } catch (err) {
-    process.stderr.write(`[opencode-companion] ensureOpencodeConfig failed: ${err.message}\n`);
-  }
-
   // Start the server
   // Windows npm shims are .cmd/.ps1; spawn() only resolves those via a shell.
-  const proc = spawnCommand("opencode", ["serve", "--port", String(port)], {
+  const proc = spawnCommand("opencode", ["serve", "--hostname", host, "--port", String(port)], {
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
     cwd: opts.cwd,
   });
+  let startupError;
+  proc.on("error", (err) => { startupError = err; });
+  proc.stdout.on("data", (chunk) => {
+    const match = chunk.toString().match(/https?:\/\/[^\s]+/);
+    if (match) url = match[0];
+  });
+  proc.stderr.on("data", () => {});
   proc.unref();
 
   // Wait for the server to become ready
   const deadline = Date.now() + SERVER_START_TIMEOUT;
   while (Date.now() < deadline) {
+    if (startupError) throw startupError;
     const started = await findRunningServer({ host, port, url });
     if (started?.apiVersion === 1) {
       return { ...started, pid: proc.pid, alreadyRunning: false };

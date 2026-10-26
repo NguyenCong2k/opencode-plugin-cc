@@ -54,6 +54,15 @@ describe("OpenCode server compatibility", () => {
     assert.equal(registration.registrationPath, file);
   });
 
+  it("discovers a configured port instead of a hard-coded port", async () => {
+    const { port, url } = await listen((req, res) => req.url === "/global/health"
+      ? json(res, 200, { healthy: true, version: "1.4.0" }) : json(res, 404, {}));
+    const found = await findRunningServer({ host: "127.0.0.1", port, registrationPaths: [] });
+    assert.equal(found.url, url);
+    assert.equal(found.apiVersion, 1);
+    assert.equal(found.source, "configured-port");
+  });
+
   it("discovers and drives the OpenCode 2 API", async () => {
     const password = "test-password";
     const expectedAuth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
