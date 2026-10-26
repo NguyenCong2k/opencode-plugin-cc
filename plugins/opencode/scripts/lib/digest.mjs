@@ -20,7 +20,7 @@ export function collectTelemetry(value) {
     if (error) {
       const text = typeof error === "string" ? error : error.message ?? JSON.stringify(error);
       failures.push(...text.split(/\r?\n/));
-      if (/permission|denied|approval|confirm|policy|interactive/i.test(text)) blocked = true;
+      if (/permission|denied|approval|confirm|blocked by .*policy|interactive/i.test(text)) blocked = true;
     }
     for (const [key, child] of Object.entries(node)) {
       if (key === "input" || key === "metadata") continue;
@@ -34,12 +34,13 @@ export function collectTelemetry(value) {
 }
 
 export function makeDigest({ result = {}, error, commands = [], logPath, worktreePath, configChanges = [] }) {
+  error ??= result.error ? new Error(result.error) : undefined;
   const telemetry = collectTelemetry(result.messages ?? result.raw ?? "");
   const failures = [...telemetry.failures, ...(error ? String(error.message ?? error).split(/\r?\n/) : [])].slice(0, 40);
   const blocked = telemetry.blocked || /permission|denied|approval|confirm|blocked|interactive/i.test(error?.message ?? "");
   const failedCommand = telemetry.commands.some((c) => c.exitCode !== null && c.exitCode !== 0);
   return {
-    status: blocked ? "blocked" : error ? "error" : failures.length || failedCommand ? "failed" : "passed",
+    status: blocked ? "blocked" : error && result.exitCode === undefined ? "error" : error || failures.length || failedCommand ? "failed" : "passed",
     filesChanged: result.changedFiles ?? [],
     commandsRun: [...commands, ...telemetry.commands],
     testsSummary: result.testsSummary ?? { observed: telemetry.tests.length, passed: telemetry.tests.filter((t) => t.exitCode === 0).length,
