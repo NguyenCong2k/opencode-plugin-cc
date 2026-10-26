@@ -3,7 +3,7 @@ name: opencode-prompting
 description: Best practices for crafting effective prompts when delegating tasks to OpenCode
 user-invocable: false
 metadata:
-  version: "1.3.0"
+  version: "1.3.1"
 ---
 
 # OpenCode Prompting Guide
