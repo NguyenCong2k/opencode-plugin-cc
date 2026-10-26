@@ -72,6 +72,8 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
     assert.ok(capture.args.includes("--standalone"));
     assert.equal(capture.pwd, capture.cwd);
     assert.equal(capture.args.some((x)=>x.includes(prompt)),false);
+    fs.unlinkSync(digest.logPath.replace(/\.log$/, ".json"));
+    assert.deepEqual(JSON.parse((await call(["result", jobId])).stdout), digest);
     const badModel = await call(["task", "--model", "opencode/missing", "test"]);
     assert.equal(JSON.parse(badModel.stdout).status, "error");
     assert.match(JSON.parse(badModel.stdout).failures.join("\n"), /Model not found/);

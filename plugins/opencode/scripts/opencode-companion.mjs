@@ -321,7 +321,7 @@ async function handleResult(argv) {
   const dataFile = jobDataPath(workspace, job.id);
   const resultData = readJson(dataFile);
 
-  console.log(resultData?.digest ? JSON.stringify(resultData.digest) : renderResult(enriched, resultData));
+  console.log((resultData?.digest ?? enriched.digest) ? JSON.stringify(resultData?.digest ?? enriched.digest) : renderResult(enriched, resultData));
 }
 
 async function handleWaitAndResult(argv) {
@@ -369,7 +369,7 @@ async function handleWaitAndResult(argv) {
     const enriched = enrichJob(job, workspace);
     const dataFile = jobDataPath(workspace, job.id);
     const resultData = readJson(dataFile);
-    console.log(resultData?.digest ? JSON.stringify(resultData.digest) : renderResult(enriched, resultData));
+    console.log((resultData?.digest ?? enriched.digest) ? JSON.stringify(resultData?.digest ?? enriched.digest) : renderResult(enriched, resultData));
     process.exit(0);
   }
 
@@ -382,7 +382,7 @@ async function handleWaitAndResult(argv) {
       const enriched = enrichJob(currentJob, workspace);
       const dataFile = jobDataPath(workspace, currentJob.id);
       const resultData = readJson(dataFile);
-      console.log(resultData?.digest ? JSON.stringify(resultData.digest) : renderResult(enriched, resultData));
+      console.log((resultData?.digest ?? enriched.digest) ? JSON.stringify(resultData?.digest ?? enriched.digest) : renderResult(enriched, resultData));
       process.exit(0);
     }
   }
