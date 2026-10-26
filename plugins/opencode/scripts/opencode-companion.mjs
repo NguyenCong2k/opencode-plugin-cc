@@ -8,7 +8,7 @@ import path from "node:path";
 import process from "node:process";
 import fs from "node:fs";
 
-import { parseArgs, extractTaskText } from "./lib/args.mjs";
+import { parseArgs, extractTaskText, parseArgumentsInput } from "./lib/args.mjs";
 import { isOpencodeInstalled, getOpencodeVersion, resolveOpencodeBinary, spawnDetached } from "./lib/process.mjs";
 import { findRunningServer, createClient, connect } from "./lib/opencode-server.mjs";
 import { resolveWorkspace } from "./lib/workspace.mjs";
@@ -30,7 +30,10 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(import.meta.d
 // Subcommand dispatch
 // ------------------------------------------------------------------
 
-const [subcommand, ...argv] = process.argv.slice(2);
+const [subcommand, ...rawArgv] = process.argv.slice(2);
+const argv = rawArgv.includes("--arguments-stdin")
+  ? [...rawArgv.filter((x) => x !== "--arguments-stdin"), ...parseArgumentsInput(fs.readFileSync(0, "utf8"))]
+  : rawArgv;
 
 const handlers = {
   setup: handleSetup,

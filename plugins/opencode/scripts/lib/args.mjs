@@ -1,5 +1,31 @@
 // Lightweight argument parser for the OpenCode companion scripts.
 
+// Tokenize data, never evaluate it as shell code. JSON argv is also supported
+// for callers needing unambiguous empty strings and embedded newlines.
+export function parseArgumentsInput(text) {
+  if (text.trimStart().startsWith("[")) {
+    const argv = JSON.parse(text);
+    if (!Array.isArray(argv) || argv.some((x) => typeof x !== "string")) throw new Error("Expected a JSON string array");
+    return argv;
+  }
+  const result = [];
+  let token = "", quote = null, started = false;
+  for (const char of text.trim()) {
+    if (quote) {
+      if (char === quote) quote = null;
+      else token += char;
+    } else if (char === '"' || char === "'") {
+      quote = char; started = true;
+    } else if (/\s/.test(char)) {
+      if (started) result.push(token);
+      token = ""; started = false;
+    } else { token += char; started = true; }
+  }
+  if (quote) throw new Error("Unterminated quote in arguments; use JSON argv for literal quotes");
+  if (started) result.push(token);
+  return result;
+}
+
 /**
  * Parse CLI arguments into options and positional args.
  * @param {string[]} argv

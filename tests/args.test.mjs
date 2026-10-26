@@ -1,6 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseArgs, extractTaskText } from "../plugins/opencode/scripts/lib/args.mjs";
+import { parseArgs, extractTaskText, parseArgumentsInput } from "../plugins/opencode/scripts/lib/args.mjs";
+
+describe("stdin arguments", () => {
+  it("preserves literal JSON argv including Windows paths and shell payloads", () => {
+    const argv = ['a "b" & c | d % é tiếng Việt', 'C:\\có dấu\\test', '$(touch injected)', ''];
+    assert.deepEqual(parseArgumentsInput(JSON.stringify(argv)), argv);
+  });
+  it("parses slash flags without evaluating shell syntax", () => {
+    assert.deepEqual(parseArgumentsInput('--model "provider/model#max" "a & b"'), ['--model','provider/model#max','a & b']);
+  });
+});
 
 describe("parseArgs", () => {
   it("parses value options", () => {
