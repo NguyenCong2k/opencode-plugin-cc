@@ -2,6 +2,8 @@
 name: opencode-result-handling
 description: Guidance for interpreting and presenting OpenCode task results, plus how to poll live progress of a running background task
 user-invocable: false
+metadata:
+  version: "1.3.0"
 ---
 
 # OpenCode Result Handling

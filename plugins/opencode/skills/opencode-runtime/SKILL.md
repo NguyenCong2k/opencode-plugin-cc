@@ -2,6 +2,8 @@
 name: opencode-runtime
 description: Internal helper contract for calling the opencode-companion runtime from Claude Code
 user-invocable: false
+metadata:
+  version: "1.3.0"
 ---
 
 # OpenCode Runtime
