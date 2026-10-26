@@ -3,6 +3,21 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { incident, failureType } from "./incidents.mjs";
+
+export const commandContext = new AsyncLocalStorage();
+
+export function killProcessTree(pid, incidentLog, reason = "Cancelled by user") {
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) throw new Error("Invalid child PID");
+  incident(incidentLog, "killed_process", `terminate process tree ${pid}`, reason, "Terminating owned job processes");
+  if (process.platform === "win32") {
+    const result = spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { encoding: "utf8", windowsHide: true });
+    if (result.status !== 0) throw new Error(result.stderr || result.stdout || "taskkill failed");
+  } else {
+    try { process.kill(-pid, "SIGTERM"); } catch { process.kill(pid, "SIGTERM"); }
+  }
+}
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -92,12 +107,30 @@ export async function getOpencodeVersion() {
  */
 export function runCommand(cmd, args, opts = {}) {
   return new Promise((resolve) => {
+    const context = commandContext.getStore();
+    let timer, settled = false, timedOut = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (timedOut) { result.exitCode = 124; result.stderr += "\nCommand timed out"; }
+      context?.commands?.push({ command: [cmd, ...args].join(" "), exitCode: result.exitCode });
+      context?.log?.(`$ ${[cmd, ...args].join(" ")}\n${result.stdout}${result.stderr}`);
+      if (result.exitCode !== 0) incident(opts.incidentLog ?? context?.incidentLog, failureType(result.stderr), [cmd, ...args].join(" "), result.stderr || result.stdout, "Command returned a nonzero exit code; inspect digest");
+      resolve(result);
+    };
     let proc;
     try { proc = spawnCommand(cmd, args, {
       stdio: [opts.input == null ? "ignore" : "pipe", "pipe", "pipe"],
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
-    }); } catch (err) { resolve({ stdout: "", stderr: String(err), exitCode: 1 }); return; }
+      detached: !IS_WINDOWS,
+    }); } catch (err) { finish({ stdout: "", stderr: String(err), exitCode: 1 }); return; }
+    if (opts.timeoutMs) timer = setTimeout(() => {
+      timedOut = true;
+      try { killProcessTree(proc.pid, opts.incidentLog ?? context?.incidentLog, `Command timed out after ${opts.timeoutMs}ms`); }
+      catch (err) { context?.log?.(err.message); }
+    }, opts.timeoutMs);
+    opts.onSpawn?.(proc);
     if (opts.input != null) { proc.stdin.on("error", () => {}); proc.stdin.end(opts.input); }
     let stdout = "";
     let stderr = "";
@@ -105,8 +138,8 @@ export function runCommand(cmd, args, opts = {}) {
     proc.stderr.on("data", (d) => (stderr += d));
     proc.stdout.on("data", (d) => opts.onOutput?.(d.toString(), "stdout"));
     proc.stderr.on("data", (d) => opts.onOutput?.(d.toString(), "stderr"));
-    proc.on("close", (exitCode) => resolve({ stdout, stderr, exitCode: exitCode ?? 1 }));
-    proc.on("error", (err) => resolve({ stdout: "", stderr: String(err), exitCode: 1 }));
+    proc.on("close", (exitCode) => finish({ stdout, stderr, exitCode: exitCode ?? 1 }));
+    proc.on("error", (err) => finish({ stdout: "", stderr: String(err), exitCode: 1 }));
   });
 }
 
