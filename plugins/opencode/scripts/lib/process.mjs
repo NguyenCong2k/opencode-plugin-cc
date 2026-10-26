@@ -1,9 +1,44 @@
 // Process utilities for the OpenCode companion.
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 
 const IS_WINDOWS = process.platform === "win32";
+
+// Never execute npm shims with cmd.exe: cmd expands %, &, | and quotes.
+// Resolve only recognized npm launcher targets; reject arbitrary batch files.
+export function resolveInvocation(cmd, args = [], opts = {}) {
+  if (!IS_WINDOWS) return { command: cmd, args };
+  let executable = cmd;
+  if (!path.isAbsolute(cmd)) {
+    const found = spawnSync("where.exe", [cmd], { encoding: "utf8", env: opts.env ?? process.env });
+    const candidates = (found.stdout || "").trim().split(/\r?\n/).filter(Boolean);
+    executable = candidates.find((p) => /\.exe$/i.test(p))
+      ?? candidates.find((p) => /\.cmd$/i.test(p)) ?? cmd;
+  }
+  if (/\.(cmd|bat)$/i.test(executable)) {
+    const source = fs.readFileSync(executable, "utf8");
+    const target = source.match(/"%dp0%[\\/]([^"\r\n]+\.(?:exe|[cm]?js))"/i)
+      ?? source.match(/"%~dp0[\\/]([^"\r\n]+\.(?:exe|[cm]?js))"/i);
+    if (!target) throw new Error(`Unsupported Windows launcher: ${executable}; configure a native executable`);
+    const file = path.resolve(path.dirname(executable), target[1]);
+    if (!fs.existsSync(file)) throw new Error(`Windows launcher target missing: ${file}`);
+    return /\.exe$/i.test(file) ? { command: file, args } : { command: process.execPath, args: [file, ...args] };
+  }
+  return { command: executable, args };
+}
+
+export function spawnCommand(cmd, args, opts = {}) {
+  const env = { ...process.env, ...opts.env };
+  const invocation = resolveInvocation(cmd, args, { env });
+  return spawn(invocation.command, invocation.args, { ...opts, env, shell: false, windowsHide: true });
+}
+
+export function runCommandSync(cmd, args, opts = {}) {
+  const invocation = resolveInvocation(cmd, args, opts);
+  return spawnSync(invocation.command, invocation.args, { ...opts, shell: false, windowsHide: true });
+}
 
 /**
  * Resolve the full path to the `opencode` binary.
@@ -38,9 +73,8 @@ export async function isOpencodeInstalled() {
 export async function getOpencodeVersion() {
   return new Promise((resolve) => {
     // Windows npm shims are .cmd/.ps1; spawn() only resolves those via a shell.
-    const proc = spawn("opencode", ["--version"], {
+    const proc = spawnCommand("opencode", ["--version"], {
       stdio: ["ignore", "pipe", "ignore"],
-      shell: IS_WINDOWS,
     });
     let out = "";
     proc.stdout.on("data", (d) => (out += d));
@@ -58,16 +92,19 @@ export async function getOpencodeVersion() {
  */
 export function runCommand(cmd, args, opts = {}) {
   return new Promise((resolve) => {
-    const proc = spawn(cmd, args, {
-      stdio: ["ignore", "pipe", "pipe"],
+    let proc;
+    try { proc = spawnCommand(cmd, args, {
+      stdio: [opts.input == null ? "ignore" : "pipe", "pipe", "pipe"],
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
-      shell: IS_WINDOWS,
-    });
+    }); } catch (err) { resolve({ stdout: "", stderr: String(err), exitCode: 1 }); return; }
+    if (opts.input != null) { proc.stdin.on("error", () => {}); proc.stdin.end(opts.input); }
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (d) => (stdout += d));
     proc.stderr.on("data", (d) => (stderr += d));
+    proc.stdout.on("data", (d) => opts.onOutput?.(d.toString(), "stdout"));
+    proc.stderr.on("data", (d) => opts.onOutput?.(d.toString(), "stderr"));
     proc.on("close", (exitCode) => resolve({ stdout, stderr, exitCode: exitCode ?? 1 }));
     proc.on("error", (err) => resolve({ stdout: "", stderr: String(err), exitCode: 1 }));
   });
@@ -84,12 +121,11 @@ export function spawnDetached(cmd, args, opts = {}) {
   const logFd = opts.logFile ? fs.openSync(opts.logFile, "a") : null;
   let child;
   try {
-    child = spawn(cmd, args, {
+    child = spawnCommand(cmd, args, {
       stdio: logFd === null ? "ignore" : ["ignore", logFd, logFd],
       detached: true,
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
-      shell: IS_WINDOWS,
     });
   } finally {
     if (logFd !== null) fs.closeSync(logFd);

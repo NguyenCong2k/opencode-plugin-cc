@@ -9,6 +9,7 @@ import path from "node:path";
 
 import { ensureOpencodeConfig } from "./opencode-config.mjs";
 import { classifyError } from "./errors.mjs";
+import { spawnCommand, runCommandSync } from "./process.mjs";
 
 const IS_WINDOWS = process.platform === "win32";
 const DEFAULT_PORT = 4096;
@@ -148,10 +149,9 @@ export async function findRunningServer(opts = {}) {
 
 function installedMajorVersion() {
   try {
-    const r = spawnSync("opencode", ["--version"], {
+    const r = runCommandSync("opencode", ["--version"], {
       encoding: "utf8",
       timeout: 10_000,
-      shell: IS_WINDOWS,
     });
     const text = `${r.stdout || ""} ${r.stderr || ""}`;
     const match = text.match(/(?:^|\s)v?(\d+)\.(\d+)\.(\d+)/);
@@ -304,10 +304,9 @@ export async function ensureServer(opts = {}) {
   if (major >= 2) {
     // OpenCode 2 owns the lifecycle, random port, password, and registration.
     // Starting a second fixed-port `serve` process bypasses that contract.
-    const proc = spawn("opencode", ["service", "start"], {
+    const proc = spawnCommand("opencode", ["service", "start"], {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: opts.cwd,
-      shell: IS_WINDOWS,
     });
     await waitForExit(proc, SERVER_START_TIMEOUT);
 
@@ -329,11 +328,10 @@ export async function ensureServer(opts = {}) {
 
   // Start the server
   // Windows npm shims are .cmd/.ps1; spawn() only resolves those via a shell.
-  const proc = spawn("opencode", ["serve", "--port", String(port)], {
+  const proc = spawnCommand("opencode", ["serve", "--port", String(port)], {
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
     cwd: opts.cwd,
-    shell: IS_WINDOWS,
   });
   proc.unref();
 
