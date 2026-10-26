@@ -49,7 +49,6 @@ export function createJobRecord(workspacePath, type, meta = {}) {
  */
 export async function runTrackedJob(workspacePath, job, runner) {
   job = { ...loadState(workspacePath).jobs?.find((j) => j.id === job.id), ...job };
-  const commands = [];
   const recordedFailures = [];
   const unrecorded = (lines) => lines.filter((line) => line.trim() && !recordedFailures.some((text) => text.includes(line) || collectTelemetry(text).failures.includes(line)));
   // Mark as running
@@ -71,11 +70,11 @@ export async function runTrackedJob(workspacePath, job, runner) {
 
   try {
     report("starting", `Job ${job.id} started`);
-    const result = await commandContext.run({ commands, recordedFailures, incidentLog: job.incidentLog, log }, () => runner({ report, log }));
+    const result = await commandContext.run({ recordedFailures, incidentLog: job.incidentLog, log }, () => runner({ report, log }));
     log(JSON.stringify(result));
     const current = loadState(workspacePath).jobs.find((j) => j.id === job.id);
     const worktreeStatus = await releaseWorktree(workspacePath, current);
-    const digest = makeDigest({ result, commands, jobType: job.type, logPath: logFile, worktreePath: current?.worktreePath, worktreeStatus, configChanges: current?.configChanges });
+    const digest = makeDigest({ result, jobType: job.type, logPath: logFile, worktreePath: current?.worktreePath, worktreeStatus, configChanges: current?.configChanges });
     const payload = { ...result, digest };
     const alreadyRecorded = digest.failures.length > 0 && unrecorded(digest.failures).length === 0;
     for (const command of collectTelemetry(result.messages ?? result.raw).commands) {
@@ -108,7 +107,7 @@ export async function runTrackedJob(workspacePath, job, runner) {
     let worktreeStatus;
     try { worktreeStatus = await releaseWorktree(workspacePath, current); }
     catch (cleanupError) { log(`Worktree retained: ${cleanupError.message}`); }
-    const digest = makeDigest({ error: err, commands, logPath: logFile, worktreePath: current?.worktreePath, worktreeStatus, configChanges: current?.configChanges });
+    const digest = makeDigest({ error: err, logPath: logFile, worktreePath: current?.worktreePath, worktreeStatus, configChanges: current?.configChanges });
     const failure = unrecorded(String(err.message).split(/\r?\n/)).join("\n");
     if (failure) incident(job.incidentLog, failureType(failure), job.id, failure, "Job stopped; see full log");
     fs.writeFileSync(jobDataPath(workspacePath, job.id), JSON.stringify({ digest }), "utf8");

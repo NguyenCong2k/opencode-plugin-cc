@@ -5,6 +5,24 @@ import os from "node:os";
 import path from "node:path";
 import { makeDigest, collectTelemetry } from "../plugins/opencode/scripts/lib/digest.mjs";
 import { createJobRecord, runTrackedJob } from "../plugins/opencode/scripts/lib/tracked-jobs.mjs";
+import { runCommand } from "../plugins/opencode/scripts/lib/process.mjs";
+
+it("keeps harness probes in full logs and only agent tool commands in the digest", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "probe-digest-"));
+  const old = process.env.OPENCODE_COMPANION_DATA;
+  process.env.OPENCODE_COMPANION_DATA = dir;
+  try {
+    const result = await runTrackedJob(dir, createJobRecord(dir, "task"), async () => {
+      await runCommand(process.execPath, ["--version"]);
+      return { raw: { tool: "shell", state: { input: { command: "npm test" }, metadata: { exit: 0 } } } };
+    });
+    assert.deepEqual(result.digest.commandsRun, [{ command: "npm test", exitCode: 0 }]);
+    assert.match(fs.readFileSync(result.digest.logPath, "utf8"), /--version/);
+  } finally {
+    if (old === undefined) delete process.env.OPENCODE_COMPANION_DATA; else process.env.OPENCODE_COMPANION_DATA = old;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 it("review digests retain bounded assistant findings and verdict", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-digest-"));

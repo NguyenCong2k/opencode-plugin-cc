@@ -52,7 +52,7 @@ function assistantText(value) {
   return texts.join("\n");
 }
 
-export function makeDigest({ result = {}, error, commands = [], logPath, worktreePath, worktreeStatus, configChanges = [], jobType }) {
+export function makeDigest({ result = {}, error, logPath, worktreePath, worktreeStatus, configChanges = [], jobType }) {
   error ??= result.error ? new Error(result.error) : undefined;
   const telemetry = collectTelemetry(result.messages ?? result.raw ?? "");
   const failures = [...telemetry.failures, ...(error ? String(error.message ?? error).split(/\r?\n/) : [])].slice(0, 40);
@@ -63,7 +63,7 @@ export function makeDigest({ result = {}, error, commands = [], logPath, worktre
   return {
     status: blocked ? "blocked" : error && result.exitCode === undefined ? "error" : error || failures.length || failedCommand ? "failed" : "passed",
     filesChanged: result.changedFiles ?? [],
-    commandsRun: [...commands, ...telemetry.commands],
+    commandsRun: telemetry.commands,
     testsSummary: result.testsSummary ?? { observed: telemetry.tests.length, passed: telemetry.tests.filter((t) => t.exitCode === 0).length,
       failed: telemetry.tests.filter((t) => t.exitCode !== null && t.exitCode !== 0).length,
       unknown: telemetry.tests.filter((t) => t.exitCode === null).length },
