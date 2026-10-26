@@ -44,10 +44,10 @@ Returns JSON with `job.status`, `job.phase`, `job.elapsed`, `job.opencodeSession
 
 ### Layer 2: Full tool-call trace (fine, every action)
 
-OpenCode runs a local HTTP server on `http://localhost:4096` that exposes every message and tool call in every session. Hitting the messages endpoint gives you the **complete live trace of what opencode is doing** — bash commands it ran, file reads, edits, assistant reasoning text, tool results. This is the best signal for "what has opencode actually done so far."
+OpenCode 2 runs a managed local service on a dynamic authenticated port. Use `opencode api` so service discovery and auth stay correct. The messages endpoint gives the **complete live trace of what opencode is doing** — commands, reads, edits, reasoning, and tool results.
 
 ```bash
-curl -s http://localhost:4096/session/<sessionId>/message
+opencode api GET /api/session/<sessionId>/message
 ```
 
 Get `<sessionId>` from Layer 1's `job.opencodeSessionId` (format `ses_XXXXXXXXX...`). Returns a JSON array where each element has `.info.role` (`user` / `assistant`) and `.parts[]` with:
@@ -57,7 +57,7 @@ Get `<sessionId>` from Layer 1's `job.opencodeSessionId` (format `ses_XXXXXXXXX.
 Typical usage — tail the last N messages for a quick "what is it doing now":
 
 ```bash
-curl -s http://localhost:4096/session/<sessionId>/message | python3 -c '
+opencode api GET /api/session/<sessionId>/message | python3 -c '
 import json, sys
 msgs = json.load(sys.stdin)
 for m in msgs[-10:]:

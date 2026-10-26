@@ -15,7 +15,8 @@ describe("process", () => {
   });
 
   it("runCommand captures stderr", async () => {
-    const { stderr, exitCode } = await runCommand("sh", ["-c", "echo err >&2"]);
-    assert.ok(stderr.includes("err"));
+    const { stderr, exitCode } = await runCommand(process.execPath, ["--definitely-invalid-node-option"]);
+    assert.notEqual(exitCode, 0);
+    assert.ok(stderr.trim().length > 0);
   });
 });

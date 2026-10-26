@@ -2,15 +2,14 @@
 //
 // Background: opencode's bash tool hangs forever in headless mode when
 //   permission.external_directory == "ask" (sst/opencode#14473).
-// Our companion runs opencode serve in headless mode, so we MUST have:
+// Legacy OpenCode 1 runs `opencode serve` in headless mode, so it MUST have:
 //   permission.bash             = "allow"
 //   permission.edit             = "allow"
 //   permission.webfetch         = "allow"
 //   permission.external_directory = "allow"
 //
 // ensureOpencodeConfig() merges these in idempotently, preserving any other
-// user keys. Called from ensureServer() before spawning opencode serve, and
-// from the `doctor` subcommand.
+// user keys. OpenCode 2 owns permission policy and this repair is not applied.
 
 import fs from "node:fs";
 import os from "node:os";

@@ -19,7 +19,7 @@ If the result says OpenCode is unavailable:
 - If the user chooses install, run:
 
 ```bash
-npm install -g opencode-ai
+npm install -g @opencode/cli
 ```
 
 - Then rerun:
@@ -34,4 +34,4 @@ If OpenCode is already installed:
 Output rules:
 - Present the final setup output to the user.
 - If installation was skipped, present the original setup output.
-- If OpenCode is installed but no provider is configured, guide the user to run `!opencode providers` to set up authentication.
+- If OpenCode is installed but no model is available, guide the user to run `!opencode auth login` and then `!opencode models`.

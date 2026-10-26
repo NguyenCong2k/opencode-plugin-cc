@@ -9,8 +9,8 @@ import process from "node:process";
 import fs from "node:fs";
 
 import { parseArgs, extractTaskText } from "./lib/args.mjs";
-import { isOpencodeInstalled, getOpencodeVersion, spawnDetached } from "./lib/process.mjs";
-import { isServerRunning, ensureServer, createClient, connect } from "./lib/opencode-server.mjs";
+import { isOpencodeInstalled, getOpencodeVersion, resolveOpencodeBinary, spawnDetached } from "./lib/process.mjs";
+import { findRunningServer, createClient, connect } from "./lib/opencode-server.mjs";
 import { resolveWorkspace } from "./lib/workspace.mjs";
 import { loadState, updateState, upsertJob, generateJobId, jobDataPath, jobLogPath } from "./lib/state.mjs";
 import { buildStatusSnapshot, resolveResultJob, resolveCancelableJob, enrichJob, matchJobReference } from "./lib/job-control.mjs";
@@ -76,11 +76,17 @@ async function handleSetup(argv) {
   let providers = [];
 
   if (installed) {
-    serverRunning = await isServerRunning();
+    const server = await findRunningServer();
+    serverRunning = !!server;
 
-    if (serverRunning) {
+    if (server) {
       try {
-        const client = createClient("http://127.0.0.1:4096");
+        const client = createClient(server.url, {
+          apiVersion: server.apiVersion,
+          username: server.username,
+          password: server.password,
+          directory: await resolveWorkspace(),
+        });
         const providerList = await client.listProviders();
         if (Array.isArray(providerList?.connected)) {
           // Current opencode API: GET /provider returns {all, default, connected}.
@@ -337,6 +343,7 @@ async function handleTask(argv) {
 
       const response = await client.sendPrompt(sessionId, prompt, {
         agent: agentName,
+        model: options.model,
       });
 
       report("finalizing", "Processing task output...");
@@ -348,8 +355,9 @@ async function handleTask(argv) {
       if (isWrite) {
         try {
           const diff = await client.getSessionDiff(sessionId);
-          if (diff?.files) {
-            changedFiles = diff.files.map((f) => f.path || f.name).filter(Boolean);
+          const files = Array.isArray(diff) ? diff : diff?.files;
+          if (Array.isArray(files)) {
+            changedFiles = files.map((f) => f.path || f.name).filter(Boolean);
           }
         } catch {
           // diff endpoint may not be available
@@ -520,10 +528,9 @@ async function handleStatus(argv) {
   // instead of a stale "investigating" phase from state.json. Runs in parallel
   // and gracefully falls back if the server is unreachable.
   if (snapshot.running.length > 0) {
-    const baseUrl = "http://127.0.0.1:4096";
     await Promise.all(snapshot.running.map(async (job) => {
       if (!job.opencodeSessionId) return;
-      const act = await getSessionLastActivity(baseUrl, job.opencodeSessionId);
+      const act = await getSessionLastActivity(null, job.opencodeSessionId);
       if (!act) return;
       const age = act.ageSec != null ? `${act.ageSec}s ago` : "";
       if (act.kind === "tool") {
@@ -691,7 +698,7 @@ async function handleCancel(argv) {
   // Abort the OpenCode session if we have one
   if (job.opencodeSessionId) {
     try {
-      const client = createClient("http://127.0.0.1:4096");
+      const client = await connect({ cwd: workspace });
       await client.abortSession(job.opencodeSessionId);
     } catch {
       // Server may not be running
@@ -818,12 +825,12 @@ async function handleDoctor(argv) {
   const push = (name, status, detail, hint) => checks.push({ name, status, detail, hint });
 
   // 1. opencode binary in PATH
-  const which = await runCommand("which", ["opencode"]).catch(() => ({ exitCode: 1, stdout: "" }));
-  if (which.exitCode === 0 && which.stdout.trim()) {
-    push("opencode-binary", "PASS", which.stdout.trim(), null);
+  const binary = await resolveOpencodeBinary();
+  if (binary) {
+    push("opencode-binary", "PASS", binary, null);
   } else {
     push("opencode-binary", "FAIL", "not in PATH",
-      "Install: npm i -g opencode-ai  OR  brew install opencode");
+      "Install: npm install -g @opencode/cli");
   }
 
   // 2. opencode version
@@ -834,10 +841,15 @@ async function handleDoctor(argv) {
     push("opencode-version", "WARN", "could not resolve version", null);
   }
 
-  // 3. opencode.json permissions (HEADLESS-SAFE — biggest footgun)
+  const majorVersion = Number((ver.stdout.match(/v?(\d+)\./) ?? [])[1] || 0);
+
+  // 3. OpenCode 1 needs headless permission repair. OpenCode 2 owns its
+  // permission policy and managed service; do not overwrite user policy.
   const cfg = readOpencodeConfig();
   const missing = missingPermissions(cfg.data);
-  if (cfg.exists && missing.length === 0) {
+  if (majorVersion >= 2) {
+    push("opencode-config", "PASS", `${cfg.path} (OpenCode 2 policy preserved)`, null);
+  } else if (cfg.exists && missing.length === 0) {
     push("opencode-config", "PASS", `${cfg.path} (all permissions allow)`, null);
   } else {
     const detail = cfg.exists
@@ -854,19 +866,12 @@ async function handleDoctor(argv) {
   }
 
   // 4. server reachable
-  const serverUrl = "http://127.0.0.1:4096";
-  let reachable = false;
-  try {
-    const r = await fetch(`${serverUrl}/global/health`, { signal: AbortSignal.timeout(2000) });
-    reachable = r.ok;
-  } catch {
-    reachable = false;
-  }
-  if (reachable) {
-    push("opencode-server", "PASS", `${serverUrl} reachable`, null);
+  const server = await findRunningServer();
+  if (server) {
+    push("opencode-server", "PASS", `${server.url} (API v${server.apiVersion})`, null);
   } else {
-    push("opencode-server", "WARN", `${serverUrl} not reachable`,
-      "Start it: opencode serve --port 4096 &");
+    push("opencode-server", "WARN", "not reachable",
+      majorVersion >= 2 ? "Start it: opencode service start" : "Start it: opencode serve --port 4096 &");
   }
 
   // 5. CLAUDE_PLUGIN_DATA sanity check
@@ -966,6 +971,7 @@ async function handleConfig(argv) {
     ["OPENCODE_COMPANION_DATA",     "(self-derived)", "Override for plugin data dir"],
     ["OPENCODE_SERVER_PASSWORD",    "(unset)", "HTTP Basic auth password"],
     ["OPENCODE_SERVER_USERNAME",    "opencode", "HTTP Basic auth username"],
+    ["OPENCODE_SERVER_URL",         "(auto)", "Explicit server URL override"],
   ];
   const envRows = envSpec.map(([name, dflt, desc]) => {
     const v = process.env[name];
@@ -981,12 +987,9 @@ async function handleConfig(argv) {
   const sRoot = stateRoot(workspace);
   const cfg = readOpencodeConfig();
   const missing = missingPermissions(cfg.data);
-  const serverUrl = "http://127.0.0.1:4096";
-  let serverReachable = false;
-  try {
-    const r = await fetch(`${serverUrl}/global/health`, { signal: AbortSignal.timeout(2000) });
-    serverReachable = r.ok;
-  } catch {}
+  const server = await findRunningServer();
+  const serverUrl = server?.url ?? "(not found)";
+  const serverReachable = !!server;
 
   const out = {
     env: envRows,
@@ -998,7 +1001,13 @@ async function handleConfig(argv) {
       permissionsOk: missing.length === 0,
       missing,
     },
-    server: { url: serverUrl, reachable: serverReachable },
+    server: {
+      url: serverUrl,
+      reachable: serverReachable,
+      apiVersion: server?.apiVersion ?? null,
+      version: server?.version ?? null,
+      source: server?.source ?? null,
+    },
   };
 
   if (wantJson) {
