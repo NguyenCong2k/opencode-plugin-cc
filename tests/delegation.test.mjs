@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "../plugins/opencode/scripts/lib/process.mjs";
+import { npmCmdShim } from "./helpers.mjs";
 
 const companion = fileURLToPath(new URL("../plugins/opencode/scripts/opencode-companion.mjs", import.meta.url));
 const fixture = `import fs from 'node:fs';
@@ -30,7 +31,7 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
   const bin = path.join(dir, "bin"), repo = path.join(dir, "repo có dấu"), data = path.join(dir, "state");
   fs.mkdirSync(bin); fs.mkdirSync(repo);
   fs.writeFileSync(path.join(bin, "fake.mjs"), fixture);
-  fs.writeFileSync(path.join(bin, "opencode.cmd"), '@echo off\r\n"%dp0%\\fake.mjs" %*\r\n');
+  fs.writeFileSync(path.join(bin, "opencode.cmd"), npmCmdShim("fake.mjs"));
   fs.writeFileSync(path.join(bin, "opencode"), `#!/bin/sh\nexec '${process.execPath.replaceAll("'", "'\\''")}' '${path.join(bin, "fake.mjs").replaceAll("'", "'\\''")}' "$@"\n`, { mode: 0o755 });
   const env = { PATH: `${bin}${path.delimiter}${process.env.PATH}`, OPENCODE_COMPANION_DATA: data, OPENCODE_WORKTREE_ROOT: path.join(dir, "worktrees"), CAPTURE: path.join(dir, "capture.json") };
   const call = (args, opts = {}) => runCommand(process.execPath, [companion, ...args], { cwd: repo, env, ...opts });

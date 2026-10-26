@@ -4,13 +4,16 @@ import { runCommand, resolveInvocation } from "../plugins/opencode/scripts/lib/p
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { npmCmdShim } from "./helpers.mjs";
 
 describe("process", () => {
   it("resolves npm launchers from Unicode PATH without lossy where.exe output", { skip: process.platform !== "win32" }, () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "launcher tiếng Việt "));
     try {
       fs.writeFileSync(path.join(dir, "entry.mjs"), "");
-      fs.writeFileSync(path.join(dir, "fake.cmd"), '"%dp0%\\entry.mjs" %*');
+      const shim = npmCmdShim("entry.mjs");
+      assert.equal(shim.match(/"%dp0%[\\/]([^"\r\n]+\.(?:exe|[cm]?js))"/i)[1], "node.exe", "the old resolver must hit the guard in this fixture");
+      fs.writeFileSync(path.join(dir, "fake.cmd"), shim);
       const result = resolveInvocation("fake", ["a & b"], { env: { PATH: dir } });
       assert.equal(result.command, process.execPath);
       assert.deepEqual(result.args, [path.join(dir, "entry.mjs"), "a & b"]);
