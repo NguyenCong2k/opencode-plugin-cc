@@ -3,7 +3,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ensureDir, appendLine } from "./fs.mjs";
-import { generateJobId, upsertJob, jobLogPath, jobDataPath } from "./state.mjs";
+import { generateJobId, upsertJob, jobLogPath, jobDataPath, loadState } from "./state.mjs";
+import { commandContext } from "./process.mjs";
+import { makeDigest } from "./digest.mjs";
+import { incident, failureType } from "./incidents.mjs";
 
 const SESSION_ID_ENV = "OPENCODE_COMPANION_SESSION_ID";
 
@@ -44,6 +47,8 @@ export function createJobRecord(workspacePath, type, meta = {}) {
  * @returns {Promise<object>} the job result
  */
 export async function runTrackedJob(workspacePath, job, runner) {
+  job = { ...loadState(workspacePath).jobs?.find((j) => j.id === job.id), ...job };
+  const commands = [];
   // Mark as running
   upsertJob(workspacePath, { id: job.id, status: "running", pid: process.pid });
 
@@ -53,42 +58,52 @@ export async function runTrackedJob(workspacePath, job, runner) {
   const report = (phase, message) => {
     const line = `[${new Date().toISOString()}] [${phase}] ${message}`;
     appendLine(logFile, line);
-    process.stderr.write(line + "\n");
-    upsertJob(workspacePath, { id: job.id, phase });
+    upsertJob(workspacePath, { id: job.id, phase, lastOutputAt: new Date().toISOString() });
   };
 
   const log = (message) => {
     appendLine(logFile, `[${new Date().toISOString()}] ${message}`);
+    upsertJob(workspacePath, { id: job.id, lastOutputAt: new Date().toISOString() });
   };
 
   try {
     report("starting", `Job ${job.id} started`);
-    const result = await runner({ report, log });
+    const result = await commandContext.run({ commands, incidentLog: job.incidentLog, log }, () => runner({ report, log }));
+    log(JSON.stringify(result));
+    const current = loadState(workspacePath).jobs.find((j) => j.id === job.id);
+    const digest = makeDigest({ result, commands, logPath: logFile, worktreePath: current?.worktreePath, configChanges: current?.configChanges });
+    const payload = { ...result, digest };
+    for (const failure of digest.failures) incident(job.incidentLog, failureType(failure), job.id, failure, "Recorded in final digest");
 
     // Mark as completed
     upsertJob(workspacePath, {
       id: job.id,
-      status: "completed",
+      status: digest.status === "passed" ? "completed" : "failed",
       completedAt: new Date().toISOString(),
-      result: result?.rendered ?? result?.summary ?? null,
+      result: JSON.stringify(digest), digest,
     });
 
     // Write result data file
     const dataFile = jobDataPath(workspacePath, job.id);
     ensureDir(path.dirname(dataFile));
-    fs.writeFileSync(dataFile, JSON.stringify(result, null, 2), "utf8");
+    fs.writeFileSync(dataFile, JSON.stringify(payload, null, 2), "utf8");
 
     report("completed", `Job ${job.id} completed`);
-    return result;
+    return payload;
   } catch (err) {
+    const current = loadState(workspacePath).jobs.find((j) => j.id === job.id);
+    const digest = makeDigest({ error: err, commands, logPath: logFile, worktreePath: current?.worktreePath, configChanges: current?.configChanges });
+    incident(job.incidentLog, failureType(err.message), job.id, err.message, "Job stopped; see full log");
+    fs.writeFileSync(jobDataPath(workspacePath, job.id), JSON.stringify({ digest }), "utf8");
     upsertJob(workspacePath, {
       id: job.id,
       status: "failed",
       completedAt: new Date().toISOString(),
       errorMessage: err.message,
+      digest,
     });
     report("failed", `Job ${job.id} failed: ${err.message}`);
-    throw err;
+    return { digest };
   }
 }
 
