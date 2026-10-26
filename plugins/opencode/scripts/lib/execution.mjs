@@ -50,7 +50,7 @@ export async function executeCliJob(workspace, job, request, { report, log }, pl
   if (request.resumeSessionId) args.push("--session", request.resumeSessionId);
   report("running", "OpenCode CLI running; full output is in the job log");
   const response = await runCommand("opencode", args, {
-    cwd, env: access.env, input: prompt + "\n\nWork autonomously; do not ask interactive questions. Report actual commands and test outcomes.\n",
+    cwd, env: access.env, input: `Job working directory: ${cwd}\nUse this directory for all file writes and repository operations.\n\n` + prompt + "\n\nWork autonomously; do not ask interactive questions. Report actual commands and test outcomes.\n",
     timeoutMs: request.timeoutMs ?? Number(process.env.OPENCODE_PROMPT_TIMEOUT_MS || 14_400_000),
     onSpawn: (child) => upsertJob(workspace, { id: job.id, agentPid: child.pid }),
     onOutput: (chunk) => log(chunk),

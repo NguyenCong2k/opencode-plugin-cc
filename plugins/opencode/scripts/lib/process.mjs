@@ -46,7 +46,7 @@ export function resolveInvocation(cmd, args = [], opts = {}) {
 }
 
 export function spawnCommand(cmd, args, opts = {}) {
-  const env = { ...process.env, ...opts.env };
+  const env = { ...process.env, ...opts.env, PWD: opts.cwd ?? process.cwd() };
   const invocation = resolveInvocation(cmd, args, { env });
   return spawn(invocation.command, invocation.args, { ...opts, env, shell: false, windowsHide: true });
 }

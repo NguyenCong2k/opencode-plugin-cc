@@ -16,6 +16,13 @@ it("digest extracts commands and exit codes, bounds failures and distinguishes b
   assert.equal(makeDigest({ error: new Error("Permission denied") }).status, "blocked");
 });
 
+it("reads real v2 nested command exit metadata and preserves command failure output", () => {
+  const digest = makeDigest({ result: { raw: { part: { type: "tool", tool: "shell", state: { input: { command: "git status" }, metadata: { metadata: { exit: 9 } }, output: "original git error" } } } } });
+  assert.equal(digest.commandsRun[0].exitCode, 9);
+  assert.equal(digest.status, "failed");
+  assert.deepEqual(digest.failures, ["original git error"]);
+});
+
 it("tracked jobs persist digest for successful and failed jobs with full logs", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "digest tiếng Việt "));
   const old = process.env.OPENCODE_COMPANION_DATA;

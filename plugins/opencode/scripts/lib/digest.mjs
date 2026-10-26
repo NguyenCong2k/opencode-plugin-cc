@@ -8,12 +8,13 @@ export function collectTelemetry(value) {
     const command = state.input?.command ?? node.input?.command;
     const tool = node.tool ?? node.name ?? node.type;
     if (typeof command === "string" && /bash|shell|tool/.test(tool || "")) {
-      const code = state.metadata?.exit ?? state.metadata?.exitCode ?? state.exitCode ?? node.exitCode;
+      const code = state.metadata?.metadata?.exit ?? state.metadata?.exit ?? state.metadata?.exitCode ?? state.exitCode ?? node.exitCode;
       const exitCode = Number.isInteger(code) ? code : state.status === "error" ? 1 : null;
       const key = node.id ?? `${command}:${exitCode}`;
       if (!seen.has(key)) {
         seen.add(key); commands.push({ command, exitCode });
         if (/\b(test|pytest|vitest|jest|ctest|dotnet test)\b/.test(command)) tests.push({ command, exitCode });
+        if (exitCode !== null && exitCode !== 0 && state.output) failures.push(...String(state.output).split(/\r?\n/));
       }
     }
     const error = state.error ?? (node.type === "error" ? node.error ?? node.message : null);

@@ -16,7 +16,7 @@ else if(args[0]==='auth') console.log('Default stored credentials');
 else if(args[0]==='models') console.log('opencode-go/flash\\nopencode/flash');
 else if(args[0]==='run') {
  let input=''; for await(const chunk of process.stdin) input+=chunk;
- if(process.env.CAPTURE) fs.writeFileSync(process.env.CAPTURE,JSON.stringify({args,input,cwd:process.cwd()}));
+ if(process.env.CAPTURE) fs.writeFileSync(process.env.CAPTURE,JSON.stringify({args,input,cwd:process.cwd(),pwd:process.env.PWD}));
  if(process.env.FAIL_PROVIDER) { console.log(JSON.stringify({type:'error',error:{message:'Policy budget exceeded'}})); process.exit(1); }
  fs.writeFileSync('hello.txt','hello');
  console.log(JSON.stringify({type:'tool_use',sessionID:'ses_fake',part:{id:'part1',type:'tool',tool:'shell',state:{status:'completed',input:{command:'git status'},metadata:{exit:0},output:'?? hello.txt'}}}));
@@ -66,6 +66,7 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
     assert.ok(capture.args.includes("opencode-go/flash#max"));
     assert.ok(capture.args.includes("--auto"));
     assert.ok(capture.args.includes("--standalone"));
+    assert.equal(capture.pwd, capture.cwd);
     assert.equal(capture.args.some((x)=>x.includes(prompt)),false);
     const badModel = await call(["task", "--model", "opencode/missing", "test"]);
     assert.equal(JSON.parse(badModel.stdout).status, "error");
