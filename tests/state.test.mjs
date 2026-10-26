@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { runCommand } from "../plugins/opencode/scripts/lib/process.mjs";
 import { createTmpDir, cleanupTmpDir, setupTestEnv } from "./helpers.mjs";
 import { loadState, saveState, updateState, generateJobId, upsertJob, stateRoot } from "../plugins/opencode/scripts/lib/state.mjs";
 
@@ -16,6 +17,13 @@ afterEach(() => {
 });
 
 describe("state", () => {
+  it("preserves updates from concurrent background workers", async () => {
+    const moduleUrl = new URL("../plugins/opencode/scripts/lib/state.mjs", import.meta.url).href;
+    const code = "const {upsertJob}=await import(process.argv[1]); for(let i=0;i<10;i++)upsertJob(process.argv[2],{id:process.argv[3]+'-'+i,status:'running'});";
+    const results = await Promise.all(["one", "two", "three"].map((worker) => runCommand(process.execPath, ["--input-type=module", "-e", code, moduleUrl, workspace, worker])));
+    results.forEach((result) => assert.equal(result.exitCode, 0, result.stderr));
+    assert.equal(loadState(workspace).jobs.length, 30);
+  });
   it("loadState returns default when no file exists", () => {
     const state = loadState(workspace);
     assert.deepEqual(state, { config: {}, jobs: [] });
