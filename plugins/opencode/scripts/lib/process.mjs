@@ -126,7 +126,11 @@ export function runCommand(cmd, args, opts = {}) {
       if (timedOut) { result.exitCode = 124; result.stderr += "\nCommand timed out"; }
       context?.commands?.push({ command: [cmd, ...args].join(" "), exitCode: result.exitCode });
       context?.log?.(`$ ${[cmd, ...args].join(" ")}\n${result.stdout}${result.stderr}`);
-      if (result.exitCode !== 0) incident(opts.incidentLog ?? context?.incidentLog, failureType(result.stderr), [cmd, ...args].join(" "), result.stderr || result.stdout, "Command returned a nonzero exit code; inspect digest");
+      if (result.exitCode !== 0) {
+        const error = result.stderr || result.stdout;
+        incident(opts.incidentLog ?? context?.incidentLog, failureType(error), [cmd, ...args].join(" "), error, "Command returned a nonzero exit code; inspect digest");
+        context?.recordedFailures?.push(error);
+      }
       resolve(result);
     };
     let proc;
