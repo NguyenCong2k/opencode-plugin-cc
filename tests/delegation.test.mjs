@@ -99,7 +99,7 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
     assert.match(failure.failures.join("\n"), /Policy budget exceeded/);
     assert.match(failure.failures.join("\n"), /opencode-go\/flash#max/);
     const incidentFile = path.join(dir, "cancel-incidents.md");
-    const slowStart = await call(["task", "--background", "--incident-log", incidentFile, "slow"], { env: { ...env, SLOW_JOB: "1" } });
+    const slowStart = await call(["task", "--background", "--worktree", "cancelled-job", "--incident-log", incidentFile, "slow"], { env: { ...env, SLOW_JOB: "1" } });
     const slowId = JSON.parse(slowStart.stdout).jobId;
     for (let i = 0; i < 100; i++) {
       const slow = JSON.parse((await call(["status", slowId, "--json"])).stdout).job;
@@ -107,8 +107,14 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     const cancel = await call(["cancel", slowId]);
+    assert.equal(cancel.exitCode, 0, cancel.stdout + cancel.stderr);
     assert.equal(JSON.parse(cancel.stdout).status, "failed");
+    const cancelled = JSON.parse(cancel.stdout);
+    assert.ok(["removed", "retained"].includes(cancelled.worktreeStatus));
+    assert.equal(fs.existsSync(cancelled.worktreePath), cancelled.worktreeStatus === "retained");
     assert.equal(JSON.parse((await call(["result", slowId])).stdout).status, "failed");
     assert.match(fs.readFileSync(incidentFile, "utf8"), /killed_process/);
+    const retry = await call(["task", "--worktree", "cancelled-job", "retry"]);
+    assert.equal(retry.exitCode, 0, retry.stdout + retry.stderr);
   } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); }
 });

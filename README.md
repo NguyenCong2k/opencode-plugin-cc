@@ -83,7 +83,11 @@ and never replaced with a blank config.
 when available. Worktrees remain for review and manual merge/removal. The default
 root is the OS temp directory under `opencode-worktrees`; override with
 `OPENCODE_WORKTREE_ROOT`. Keeping this root short avoids Git for Windows path
-limits. Jobs normalize logical PWD to the worktree.
+limits. Jobs normalize logical PWD to the worktree. Clean worktrees are removed
+after completion, startup failure, or cancellation. Dirty worktrees retain all
+output and are reused by the next job requesting that branch; active jobs cannot
+share one. If Git refuses cleanup, the worktree is also retained for reuse.
+The digest reports `worktreeStatus` (`removed` or `retained`).
 
 `--incident-log <path>` or `OPENCODE_INCIDENT_LOG` appends UTC Markdown entries
 for failures, blocked requests, timeouts and owned process termination.

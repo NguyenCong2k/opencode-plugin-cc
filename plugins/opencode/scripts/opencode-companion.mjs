@@ -26,6 +26,7 @@ import { incident } from "./lib/incidents.mjs";
 import { killProcessTree } from "./lib/process.mjs";
 import { discoverProviders } from "./lib/providers.mjs";
 import { makeDigest } from "./lib/digest.mjs";
+import { releaseWorktree } from "./lib/worktree.mjs";
 
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(import.meta.dirname, "..");
 
@@ -442,12 +443,14 @@ async function handleCancel(argv) {
     }
   }
 
+  const worktreeStatus = await releaseWorktree(workspace, job);
+
   upsertJob(workspace, {
     id: job.id,
     status: "failed",
     completedAt: new Date().toISOString(),
     errorMessage: "Canceled by user",
-    digest: makeDigest({ result: { error: "Canceled by user", exitCode: 130 }, logPath: jobLogPath(workspace, job.id), worktreePath: job.worktreePath, configChanges: job.configChanges }),
+    digest: makeDigest({ result: { error: "Canceled by user", exitCode: 130 }, logPath: jobLogPath(workspace, job.id), worktreePath: job.worktreePath, worktreeStatus, configChanges: job.configChanges }),
   });
   const cancelled = loadState(workspace).jobs.find((j) => j.id === job.id).digest;
   fs.writeFileSync(jobDataPath(workspace, job.id), JSON.stringify({ digest: cancelled }), "utf8");

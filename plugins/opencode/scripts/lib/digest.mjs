@@ -52,7 +52,7 @@ function assistantText(value) {
   return texts.join("\n");
 }
 
-export function makeDigest({ result = {}, error, commands = [], logPath, worktreePath, configChanges = [], jobType }) {
+export function makeDigest({ result = {}, error, commands = [], logPath, worktreePath, worktreeStatus, configChanges = [], jobType }) {
   error ??= result.error ? new Error(result.error) : undefined;
   const telemetry = collectTelemetry(result.messages ?? result.raw ?? "");
   const failures = [...telemetry.failures, ...(error ? String(error.message ?? error).split(/\r?\n/) : [])].slice(0, 40);
@@ -68,6 +68,7 @@ export function makeDigest({ result = {}, error, commands = [], logPath, worktre
       failed: telemetry.tests.filter((t) => t.exitCode !== null && t.exitCode !== 0).length,
       unknown: telemetry.tests.filter((t) => t.exitCode === null).length },
     failures, logPath, worktreePath: worktreePath ?? null, configChanges,
+    ...(worktreeStatus ? { worktreeStatus } : {}),
     ...(review !== null ? { reviewOutput: review.slice(0, 8000), reviewOutputTruncated: review.length > 8000 } : {}),
   };
 }
