@@ -54,6 +54,17 @@ describe("OpenCode server compatibility", () => {
     assert.equal(registration.registrationPath, file);
   });
 
+  it("default health check discovers the registered service without a port", async () => {
+    const { url } = await listen((req, res) => json(res, 200, { version: "2.1.4" }));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-service-"));
+    const old = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = dir;
+    cleanups.push(() => { if (old === undefined) delete process.env.XDG_STATE_HOME; else process.env.XDG_STATE_HOME = old; fs.rmSync(dir, { recursive: true, force: true }); });
+    fs.mkdirSync(path.join(dir, "opencode"));
+    fs.writeFileSync(path.join(dir, "opencode", "service.json"), JSON.stringify({ url }));
+    assert.equal(await isServerRunning(), true);
+  });
+
   it("discovers a configured port instead of a hard-coded port", async () => {
     const { port, url } = await listen((req, res) => req.url === "/global/health"
       ? json(res, 200, { healthy: true, version: "1.4.0" }) : json(res, 404, {}));

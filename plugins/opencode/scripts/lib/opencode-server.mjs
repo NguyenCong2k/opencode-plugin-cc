@@ -272,8 +272,8 @@ function countChildren(pid) {
  * @param {number} port
  * @returns {Promise<boolean>}
  */
-export async function isServerRunning(host = DEFAULT_HOST, port = DEFAULT_PORT) {
-  return (await findRunningServer({ url: `http://${host}:${port}` })) !== null;
+export async function isServerRunning(host, port) {
+  return (await findRunningServer(host || port ? { url: `http://${host ?? DEFAULT_HOST}:${port ?? DEFAULT_PORT}` } : {})) !== null;
 }
 
 /**
