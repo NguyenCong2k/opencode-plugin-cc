@@ -7,6 +7,17 @@ import { makeDigest, collectTelemetry } from "../plugins/opencode/scripts/lib/di
 import { createJobRecord, runTrackedJob } from "../plugins/opencode/scripts/lib/tracked-jobs.mjs";
 import { runCommand } from "../plugins/opencode/scripts/lib/process.mjs";
 
+it("classifies permission denial phrases without matching ordinary confirmation or permission names", () => {
+  for (const message of ["ConfirmationDialog failed", "confirm password mismatch", "approvalTests failed", "interactive shell test failed", "permission parser failed", "denied.json missing"]) {
+    assert.equal(makeDigest({ result: { error: message, exitCode: 1 } }).status, "failed", message);
+    assert.equal(makeDigest({ result: { raw: { type: "error", error: { message } } } }).status, "failed", message);
+  }
+  for (const message of ["Permission denied", "approval required", "tool needs interactive input", "blocked by organization policy", "Full access blocked by agent plan permission deny"]) {
+    assert.equal(makeDigest({ error: new Error(message) }).status, "blocked", message);
+    assert.equal(collectTelemetry({ type: "error", error: { message } }).blocked, true, message);
+  }
+});
+
 it("keeps harness probes in full logs and only agent tool commands in the digest", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "probe-digest-"));
   const old = process.env.OPENCODE_COMPANION_DATA;

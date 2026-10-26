@@ -9,6 +9,10 @@ export function incident(file = process.env.OPENCODE_INCIDENT_LOG, type, command
 }
 
 export function failureType(text) {
-  return /denied|permission|approval|confirm|policy|interactive/i.test(text) ? "blocked"
+  return isBlockedFailure(text) ? "blocked"
     : /timeout|timed out/i.test(text) ? "timeout" : "command_failed";
+}
+
+export function isBlockedFailure(text) {
+  return /\b(?:permissions? (?:denied|deny|required)|access denied|approval (?:required|requested|needed)|(?:requires?|needs?|awaiting) (?:user )?(?:approval|confirmation|interactive input)|interactive input required|blocked by [^\r\n]{0,100}\bpolicy|full access blocked by)\b/i.test(text);
 }
