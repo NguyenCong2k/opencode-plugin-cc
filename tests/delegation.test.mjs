@@ -31,7 +31,7 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
   fs.writeFileSync(path.join(bin, "fake.mjs"), fixture);
   fs.writeFileSync(path.join(bin, "opencode.cmd"), '@echo off\r\n"%dp0%\\fake.mjs" %*\r\n');
   fs.writeFileSync(path.join(bin, "opencode"), `#!/bin/sh\nexec '${process.execPath.replaceAll("'", "'\\''")}' '${path.join(bin, "fake.mjs").replaceAll("'", "'\\''")}' "$@"\n`, { mode: 0o755 });
-  const env = { PATH: `${bin}${path.delimiter}${process.env.PATH}`, OPENCODE_COMPANION_DATA: data, CAPTURE: path.join(dir, "capture.json") };
+  const env = { PATH: `${bin}${path.delimiter}${process.env.PATH}`, OPENCODE_COMPANION_DATA: data, OPENCODE_WORKTREE_ROOT: path.join(dir, "worktrees"), CAPTURE: path.join(dir, "capture.json") };
   const call = (args, opts = {}) => runCommand(process.execPath, [companion, ...args], { cwd: repo, env, ...opts });
   try {
     await runCommand("git", ["init", repo]);
