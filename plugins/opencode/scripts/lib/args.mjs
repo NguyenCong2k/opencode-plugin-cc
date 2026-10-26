@@ -14,7 +14,7 @@ export function parseArgumentsInput(text) {
     if (quote) {
       if (char === quote) quote = null;
       else token += char;
-    } else if (char === '"' || char === "'") {
+    } else if (!started && (char === '"' || char === "'")) {
       quote = char; started = true;
     } else if (/\s/.test(char)) {
       if (started) result.push(token);

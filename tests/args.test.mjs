@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import { parseArgs, extractTaskText, parseArgumentsInput } from "../plugins/opencode/scripts/lib/args.mjs";
 
 describe("stdin arguments", () => {
+  it("preserves contractions and quotes embedded in natural-language tokens", () => {
+    assert.deepEqual(parseArgumentsInput("fix the bug, don't crash user's file"), ["fix", "the", "bug,", "don't", "crash", "user's", "file"]);
+    assert.deepEqual(parseArgumentsInput('--model "provider/model#max" inspect foo\'bar and foo"bar'), ["--model", "provider/model#max", "inspect", "foo'bar", "and", 'foo"bar']);
+    assert.throws(() => parseArgumentsInput('--model "unterminated'), /Unterminated quote/);
+  });
   it("preserves literal JSON argv including Windows paths and shell payloads", () => {
     const argv = ['a "b" & c | d % é tiếng Việt', 'C:\\có dấu\\test', '$(touch injected)', ''];
     assert.deepEqual(parseArgumentsInput(JSON.stringify(argv)), argv);
