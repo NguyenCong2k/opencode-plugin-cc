@@ -23,6 +23,7 @@ import { autoHealJob, autoHealJobs, getSessionLastActivity } from "./lib/auto-he
 import { ensureOpencodeConfig, readOpencodeConfig, missingPermissions, resolveConfigPath } from "./lib/opencode-config.mjs";
 import { stateRoot } from "./lib/state.mjs";
 import { runCommand } from "./lib/process.mjs";
+import { discoverProviders } from "./lib/providers.mjs";
 
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(import.meta.dirname, "..");
 
@@ -77,6 +78,7 @@ async function handleSetup(argv) {
 
   let serverRunning = false;
   let providers = [];
+  let providerDiscovery = {};
 
   if (installed) {
     const server = await findRunningServer();
@@ -104,6 +106,11 @@ async function handleSetup(argv) {
     }
   }
 
+  if (installed && providers.length === 0) {
+    providerDiscovery = await discoverProviders({ major: Number((version?.match(/(\d+)\./) ?? [])[1] || 1) });
+    providers = providerDiscovery.providers;
+  }
+
   // Handle review gate toggle
   const workspace = await resolveWorkspace();
   let reviewGate = false;
@@ -125,7 +132,7 @@ async function handleSetup(argv) {
     reviewGate = state.config?.reviewGate ?? false;
   }
 
-  const status = { installed, version, serverRunning, providers, reviewGate };
+  const status = { installed, version, serverRunning, ...providerDiscovery, providers, reviewGate };
 
   if (options.json) {
     console.log(JSON.stringify(status, null, 2));
