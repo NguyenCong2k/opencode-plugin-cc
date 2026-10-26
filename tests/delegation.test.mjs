@@ -11,7 +11,7 @@ const fixture = `import fs from 'node:fs';
 const args=process.argv.slice(2);
 if(args[0]==='--version') console.log('opencode v2.1.4');
 else if(args.includes('--help')) console.log('--auto --standalone');
-else if(args[0]==='debug') console.log(JSON.stringify(args[1]==='config'?[]:[{id:'build',permissions:[]},{id:'plan',permissions:[]}]));
+else if(args[0]==='debug') console.log(JSON.stringify(args[1]==='config'?[]:[{id:'build',permissions:[]},{id:'plan',permissions:[{action:'edit',effect:'deny'}]}]));
 else if(args[0]==='auth') console.log('Default stored credentials');
 else if(args[0]==='models') console.log('opencode-go/flash\\nopencode/flash');
 else if(args[0]==='run') {
@@ -25,7 +25,7 @@ else if(args[0]==='run') {
 }
 `;
 
-it("background CLI jobs preserve model variant and stdin, isolate worktrees, expose cheap status and JSON results", async () => {
+it("background CLI jobs preserve model variant and stdin, isolate worktrees, expose cheap status and JSON results", async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ủy quyền tiếng Việt "));
   const bin = path.join(dir, "bin"), repo = path.join(dir, "repo có dấu"), data = path.join(dir, "state");
   fs.mkdirSync(bin); fs.mkdirSync(repo);
@@ -43,6 +43,22 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
     const configured = JSON.parse((await call(["setup", "--json", "--full-access", "true", "--repair-config", "false"])).stdout);
     assert.equal(configured.userConfig.full_access, true);
     assert.equal(configured.userConfig.repair_config, false);
+    await t.test("full-access reviews and read-only tasks default to build without overriding explicit agents", async () => {
+      for (const args of [["review"], ["adversarial-review"], ["task", "--read-only", "inspect"]]) {
+        const result = await call(args);
+        assert.equal(result.exitCode, 0, result.stdout + result.stderr);
+        assert.equal(JSON.parse(result.stdout).status, "passed");
+        const capture = JSON.parse(fs.readFileSync(env.CAPTURE));
+        assert.equal(capture.args[capture.args.indexOf("--agent") + 1], "build");
+      }
+      const explicit = await call(["review", "--agent", "plan"]);
+      assert.equal(JSON.parse(explicit.stdout).status, "blocked");
+      const normal = await call(["review", "--no-full-access"]);
+      assert.equal(normal.exitCode, 0, normal.stdout + normal.stderr);
+      const capture = JSON.parse(fs.readFileSync(env.CAPTURE));
+      assert.equal(capture.args[capture.args.indexOf("--agent") + 1], "plan");
+      fs.unlinkSync(path.join(repo, "hello.txt"));
+    });
     const prompt = 'a "b" & c | d % é tiếng Việt';
     const start = await call(["task", "--arguments-stdin"], { input: JSON.stringify(["--background", "--full-access", "--model", "opencode-go/flash#max", "--worktree", "test-job", "--incident-log", path.join(dir,"incidents.md"), prompt]) });
     assert.equal(start.exitCode, 0, start.stderr);

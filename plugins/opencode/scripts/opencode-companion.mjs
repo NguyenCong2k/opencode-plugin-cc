@@ -174,7 +174,7 @@ async function handleDelegatedJob(type, argv) {
     ? state.jobs?.filter((j) => j.type === "task" && j.opencodeSessionId).at(-1) : null;
   const request = {
     type, taskText, fullAccess, isWrite, model: options.model,
-    agent: options.agent ?? (isWrite ? "build" : "plan"),
+    agent: options.agent ?? (fullAccess || isWrite ? "build" : "plan"),
     worktree: options.worktree, incidentLog,
     repairConfig: !options["no-repair-config"] && state.config?.repair_config !== false,
     standalone: !!options.standalone, base: options.base,
