@@ -3,8 +3,8 @@ import { runCommand } from "./process.mjs";
 const stripAnsi = (s) => s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
 
 export async function discoverProviders({ run = runCommand, major = 2, cwd } = {}) {
-  const auth = await run("opencode", ["auth", "list"], { cwd });
-  const models = await run("opencode", ["models", ...(major >= 2 ? ["--standalone"] : [])], { cwd });
+  const auth = await run("opencode", ["auth", "list"], { cwd, timeoutMs: 60_000 });
+  const models = await run("opencode", ["models", ...(major >= 2 ? ["--standalone"] : [])], { cwd, timeoutMs: 60_000 });
   const availableModels = stripAnsi(models.stdout).split(/\r?\n/)
     .map((line) => line.trim()).filter((line) => /^[\w.-]+\/\S+$/.test(line));
   return {

@@ -23,10 +23,10 @@ export function assertFullAccessPolicy(documents, agents, agentName) {
 export async function prepareAccess({ fullAccess, repairConfig = true, major, cwd, agent = "build", run = runCommand }) {
   if (!fullAccess) return { flags: [], env: {}, configChanges: [] };
   if (major >= 2) {
-    const help = await run("opencode", ["run", "--help"], { cwd });
+    const help = await run("opencode", ["run", "--help"], { cwd, timeoutMs: 15_000 });
     if (!/--auto\b/.test(help.stdout) || !/--standalone\b/.test(help.stdout)) throw new Error("Installed OpenCode does not support full access (--auto/--standalone)");
-    const config = await run("opencode", ["debug", "config"], { cwd });
-    const agents = await run("opencode", ["debug", "agents"], { cwd });
+    const config = await run("opencode", ["debug", "config"], { cwd, timeoutMs: 15_000 });
+    const agents = await run("opencode", ["debug", "agents"], { cwd, timeoutMs: 15_000 });
     if (config.exitCode !== 0 || agents.exitCode !== 0) throw new Error("Cannot verify OpenCode full-access policy before startup");
     assertFullAccessPolicy(JSON.parse(config.stdout), JSON.parse(agents.stdout), agent);
     return { flags: ["--auto"], env: {}, configChanges: [], mode: "auto-approve; host filesystem, network and processes" };
