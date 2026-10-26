@@ -35,8 +35,12 @@ export function resolveInvocation(cmd, args = [], opts = {}) {
   }
   if (/\.(cmd|bat)$/i.test(executable)) {
     const source = fs.readFileSync(executable, "utf8");
-    const target = source.match(/"%dp0%[\\/]([^"\r\n]+\.(?:exe|[cm]?js))"/i)
-      ?? source.match(/"%~dp0[\\/]([^"\r\n]+\.(?:exe|[cm]?js))"/i);
+    // npm's IF EXIST/SET lines mention node.exe before the actual command.
+    // Only accept a launcher invocation forwarding argv, never a guard.
+    const target = source.split(/\r?\n/).reverse()
+      .filter((line) => !/^\s*@?(?:if|set|rem)\b/i.test(line) && /%\*/.test(line))
+      .map((line) => line.match(/"(?:%dp0%|%~dp0)[\\/]([^"\r\n]+\.(?:exe|[cm]?js))"/i))
+      .find(Boolean);
     if (!target) throw new Error(`Unsupported Windows launcher: ${executable}; configure a native executable`);
     const file = path.resolve(path.dirname(executable), target[1]);
     if (!fs.existsSync(file)) throw new Error(`Windows launcher target missing: ${file}`);
