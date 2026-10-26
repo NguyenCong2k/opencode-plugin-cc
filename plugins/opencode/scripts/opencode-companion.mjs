@@ -15,7 +15,7 @@ import { resolveWorkspace } from "./lib/workspace.mjs";
 import { loadState, updateState, upsertJob, jobDataPath, jobLogPath } from "./lib/state.mjs";
 import { resolveResultJob, resolveCancelableJob, enrichJob, matchJobReference } from "./lib/job-control.mjs";
 import { createJobRecord, runTrackedJob, getClaudeSessionId } from "./lib/tracked-jobs.mjs";
-import { renderResult, renderSetup } from "./lib/render.mjs";
+import { renderResult, renderSetup, renderStatus, renderReview } from "./lib/render.mjs";
 import { readJson } from "./lib/fs.mjs";
 import { autoHealJobs } from "./lib/auto-heal.mjs";
 import { ensureOpencodeConfig, readOpencodeConfig, missingPermissions } from "./lib/opencode-config.mjs";
@@ -162,7 +162,7 @@ async function handleTask(argv) { return handleDelegatedJob("task", argv); }
 async function handleDelegatedJob(type, argv) {
   const { options, positional } = parseArgs(argv, {
     valueOptions: ["model", "agent", "base", "scope", "worktree", "incident-log", "prompt-file", "timeout-ms"],
-    booleanOptions: ["write", "read-only", "background", "wait", "resume-last", "fresh", "full-access", "no-full-access", "no-repair-config", "standalone"],
+    booleanOptions: ["write", "read-only", "background", "wait", "resume-last", "fresh", "full-access", "no-full-access", "no-repair-config", "standalone", "json", "text"],
   });
   const workspace = await resolveWorkspace();
   const state = loadState(workspace);
@@ -203,7 +203,10 @@ async function handleDelegatedJob(type, argv) {
     return;
   }
   const result = await runTrackedJob(workspace, job, (context) => executeCliJob(workspace, job, request, context, PLUGIN_ROOT));
-  console.log(JSON.stringify(result.digest));
+  if (options.text && !options.json && type !== "task") {
+    const review = tryParseJson(result.digest.reviewOutput ?? "");
+    console.log(review && Array.isArray(review.findings) ? renderReview(review) : result.digest.reviewOutput || JSON.stringify(result.digest));
+  } else console.log(JSON.stringify(result.digest));
   if (result.digest.status !== "passed") process.exitCode = 1;
 }
 
@@ -261,12 +264,17 @@ async function handleTaskResumeCandidate(argv) {
 
 async function handleStatus(argv) {
   const { options, positional } = parseArgs(argv ?? [], {
-    booleanOptions: ["json", "all"],
+    booleanOptions: ["json", "all", "text"],
   });
 
   const workspace = await resolveWorkspace();
   let state = loadState(workspace);
   const sessionId = getClaudeSessionId();
+  const printText = (jobs) => {
+    const recent = [...jobs].sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")));
+    const finished = (job) => ["completed", "failed", "cancelled"].includes(job.status);
+    console.log(renderStatus({ running: recent.filter((job) => !finished(job)), latestFinished: recent.find(finished) ?? null, recent }));
+  };
   // A cheap, local-only query: never fetch session messages or print logs.
   if (positional[0]) {
     const { job, ambiguous } = matchJobReference(state.jobs ?? [], positional[0]);
@@ -275,10 +283,12 @@ async function handleStatus(argv) {
       process.exitCode = 1; return;
     }
     const status = job.status === "completed" ? "done" : ["failed", "cancelled"].includes(job.status) ? "failed" : "running";
+    if (options.text && !options.json) { printText([job]); return; }
     console.log(JSON.stringify({ job: { id: job.id, status, pid: job.pid ?? null, agentPid: job.agentPid ?? null, lastOutputAt: job.lastOutputAt ?? null } }));
     return;
   }
   const jobs = (state.jobs ?? []).filter((job) => options.all || !sessionId || job.sessionId === sessionId);
+  if (options.text && !options.json) { printText(jobs); return; }
   console.log(JSON.stringify({ jobs: jobs.map((job) => ({
     id: job.id,
     status: job.status === "completed" ? "done" : ["failed", "cancelled"].includes(job.status) ? "failed" : "running",

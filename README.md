@@ -44,6 +44,11 @@ return `jobId`, PID and log path. `status <job-id> --json` reads local metadata
 only: `running|done|failed`, PID, agent PID and `lastOutputAt`. `result <job-id>`
 returns the saved digest. Full transcripts stay in `logPath`.
 
+For human-readable output, use `review --text`, `adversarial-review --text`, or
+`status [job-id] --text`. JSON remains the default; `--json` takes precedence.
+Review digests retain up to 8,000 characters in `reviewOutput`, with
+`reviewOutputTruncated` indicating whether the full log contains more.
+
 | Command | Purpose |
 | --- | --- |
 | `/opencode:rescue` | Delegate work through the thin forwarder |

@@ -22,7 +22,7 @@ else if(args[0]==='run') {
  if(process.env.FAIL_PROVIDER) { console.log(JSON.stringify({type:'error',error:{message:'Policy budget exceeded'}})); process.exit(1); }
  fs.writeFileSync('hello.txt','hello');
  console.log(JSON.stringify({type:'tool_use',sessionID:'ses_fake',part:{id:'part1',type:'tool',tool:'shell',state:{status:'completed',input:{command:'git status'},metadata:{exit:0},output:'?? hello.txt'}}}));
- console.log(JSON.stringify({type:'text',part:{type:'text',text:'done'}}));
+ console.log(JSON.stringify({type:'text',part:{type:'text',text:process.env.REVIEW_TEXT ?? 'done'}}));
 }
 `;
 
@@ -44,6 +44,24 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
     const configured = JSON.parse((await call(["setup", "--json", "--full-access", "true", "--repair-config", "false"])).stdout);
     assert.equal(configured.userConfig.full_access, true);
     assert.equal(configured.userConfig.repair_config, false);
+    await t.test("text modes reach status and review renderers while JSON remains the default", async () => {
+      const empty = await call(["status", "--text"]);
+      assert.match(empty.stdout, /No OpenCode jobs/);
+      const review = JSON.stringify({ verdict: "needs-attention", summary: "Fix null handling", findings: [{ file: "api.js", line_start: 2, line_end: 3, severity: "high", title: "Null crash", body: "Null input crashes", confidence: 0.9, recommendation: "Validate input" }] });
+      for (const type of ["review", "adversarial-review"]) {
+        const output = await call([type, "--text"], { env: { ...env, REVIEW_TEXT: review } });
+        assert.equal(output.exitCode, 0, output.stdout + output.stderr);
+        assert.match(output.stdout, /Review Verdict: NEEDS ATTENTION/);
+        assert.match(output.stdout, /api.js:2-3/);
+      }
+      const status = await call(["status", "--text"]);
+      assert.match(status.stdout, /Latest Finished/);
+      const json = await call(["review", "--text", "--json"]);
+      assert.equal(JSON.parse(json.stdout).status, "passed");
+      const plain = await call(["review", "--text"]);
+      assert.equal(plain.stdout.trim(), "done");
+      fs.unlinkSync(path.join(repo, "hello.txt"));
+    });
     await t.test("full-access reviews and read-only tasks default to build without overriding explicit agents", async () => {
       for (const args of [["review"], ["adversarial-review"], ["task", "--read-only", "inspect"]]) {
         const result = await call(args);
