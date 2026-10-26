@@ -2,12 +2,12 @@
 // Mirrors the codex-plugin-cc state.mjs pattern: SHA-256 hash of workspace path,
 // JSON state file, per-job files and logs.
 
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureDir, readJson, writeJson } from "./fs.mjs";
+import { workspaceKey } from "./workspace-key.mjs";
 
 const MAX_JOBS = 50;
 
@@ -66,7 +66,7 @@ export function stateRoot(workspacePath) {
       base = path.join(os.tmpdir(), "opencode-companion");
     }
   }
-  const hash = crypto.createHash("sha256").update(workspacePath).digest("hex").slice(0, 16);
+  const hash = workspaceKey(workspacePath);
   return path.join(base, hash);
 }
 

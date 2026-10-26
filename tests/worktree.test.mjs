@@ -58,7 +58,8 @@ it("releases clean worktrees on success and startup failure, preserves and reuse
         return { changedFiles: ["keep.txt"] };
       });
       assert.equal(outcome.digest.worktreeStatus, "retained");
-      const reused = await createWorktree(dir, "dirty-branch", "next-job");
+      const equivalent = process.platform === "win32" ? dir.replaceAll("\\", "/").toUpperCase() : dir;
+      const reused = await createWorktree(equivalent, "dirty-branch", "next-job");
       assert.equal(fs.realpathSync.native(reused.path), fs.realpathSync.native(tree.path));
       assert.equal(fs.readFileSync(path.join(reused.path, "keep.txt"), "utf8"), "user-owned output");
       upsertJob(dir, { id: "next-job", status: "running", worktreePath: reused.path });

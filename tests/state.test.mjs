@@ -17,6 +17,14 @@ afterEach(() => {
 });
 
 describe("state", () => {
+  it("shares state across Windows separators drive casing and dot segments", { skip: process.platform !== "win32" }, () => {
+    const first = "C:\\Review\\Workspace";
+    saveState(first, { config: {}, jobs: [{ id: "same-job" }] });
+    for (const equivalent of ["c:/review/workspace", "C:\\Review\\Workspace\\.", "c:/review/other/../workspace/"]) {
+      assert.equal(stateRoot(equivalent), stateRoot(first));
+      assert.equal(loadState(equivalent).jobs[0].id, "same-job");
+    }
+  });
   it("preserves updates from concurrent background workers", async () => {
     const moduleUrl = new URL("../plugins/opencode/scripts/lib/state.mjs", import.meta.url).href;
     const code = "const {upsertJob}=await import(process.argv[1]); for(let i=0;i<10;i++)upsertJob(process.argv[2],{id:process.argv[3]+'-'+i,status:'running'});";

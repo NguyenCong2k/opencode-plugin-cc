@@ -4,9 +4,10 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { runCommand } from "./process.mjs";
 import { updateState } from "./state.mjs";
+import { workspaceKey } from "./workspace-key.mjs";
 
 function worktreeRoot(workspace) {
-  const key = crypto.createHash("sha256").update(workspace).digest("hex").slice(0, 16);
+  const key = workspaceKey(workspace);
   return path.join(process.env.OPENCODE_WORKTREE_ROOT ?? path.join(os.tmpdir(), "opencode-worktrees"), key);
 }
 
