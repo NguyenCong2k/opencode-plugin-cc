@@ -1,5 +1,5 @@
 export function collectTelemetry(value) {
-  const commands = [], failures = [], tests = [];
+  const commands = [], failures = [], tests = [], files = [];
   const seen = new Set();
   let blocked = false;
   function visit(node) {
@@ -7,6 +7,10 @@ export function collectTelemetry(value) {
     const state = node.state ?? node;
     const command = state.input?.command ?? node.input?.command;
     const tool = node.tool ?? node.name ?? node.type;
+    if (/^(?:write|edit|patch|apply_patch)$/.test(tool || "") && state.status === "completed") {
+      const file = state.input?.filePath ?? state.input?.file_path ?? state.input?.path;
+      if (typeof file === "string") files.push(file);
+    }
     if (typeof command === "string" && /bash|shell|tool/.test(tool || "")) {
       const code = state.metadata?.metadata?.exit ?? state.metadata?.exit ?? state.metadata?.exitCode ?? state.exitCode ?? node.exitCode;
       const exitCode = Number.isInteger(code) ? code : state.status === "error" ? 1 : null;
@@ -31,7 +35,7 @@ export function collectTelemetry(value) {
   if (typeof value === "string") {
     for (const line of value.split(/\r?\n/)) { try { visit(JSON.parse(line)); } catch {} }
   } else visit(value);
-  return { commands, failures: failures.slice(0, 40), tests, blocked };
+  return { commands, failures: failures.slice(0, 40), tests, blocked, files: [...new Set(files)] };
 }
 
 export function makeDigest({ result = {}, error, commands = [], logPath, worktreePath, configChanges = [] }) {

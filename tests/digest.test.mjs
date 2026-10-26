@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { makeDigest } from "../plugins/opencode/scripts/lib/digest.mjs";
+import { makeDigest, collectTelemetry } from "../plugins/opencode/scripts/lib/digest.mjs";
 import { createJobRecord, runTrackedJob } from "../plugins/opencode/scripts/lib/tracked-jobs.mjs";
 
 it("digest extracts commands and exit codes, bounds failures and distinguishes blocked", () => {
@@ -21,6 +21,7 @@ it("reads real v2 nested command exit metadata and preserves command failure out
   assert.equal(digest.commandsRun[0].exitCode, 9);
   assert.equal(digest.status, "failed");
   assert.deepEqual(digest.failures, ["original git error"]);
+  assert.deepEqual(collectTelemetry({ part: { tool: "write", state: { status: "completed", input: { path: "outside-workspace.txt" } } } }).files, ["outside-workspace.txt"]);
 });
 
 it("tracked jobs persist digest for successful and failed jobs with full logs", async () => {

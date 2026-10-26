@@ -59,7 +59,12 @@ export async function executeCliJob(workspace, job, request, { report, log }, pl
   const sessionEvent = response.stdout.split(/\r?\n/).map((line) => { try { return JSON.parse(line); } catch { return null; } }).find((event) => event?.sessionID);
   if (sessionEvent) upsertJob(workspace, { id: job.id, opencodeSessionId: sessionEvent.sessionID });
   const after = await dirtySnapshot(cwd);
-  const changedFiles = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((file) => before[file] !== after[file]);
+  const gitChanges = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((file) => before[file] !== after[file]);
+  const observedWrites = telemetry.files.map((file) => {
+    const absolute = path.resolve(cwd, file), relative = path.relative(cwd, absolute);
+    return relative.startsWith(".." + path.sep) || path.isAbsolute(relative) ? absolute : relative.replaceAll(path.sep, "/");
+  });
+  const changedFiles = [...new Set([...gitChanges, ...observedWrites])];
   if (response.exitCode !== 0 || telemetry.failures.length) {
     const error = providerError(new Error(telemetry.failures.join("\n") || response.stderr || response.stdout || `OpenCode exited ${response.exitCode}`), request.model, models);
     // Preserve all observed commands and changed files even when CLI fails.

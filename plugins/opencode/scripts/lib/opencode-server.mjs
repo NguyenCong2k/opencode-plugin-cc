@@ -2,7 +2,7 @@
 // Unlike codex-plugin-cc which uses JSON-RPC over stdin/stdout,
 // OpenCode exposes a REST API + SSE. This module wraps that API.
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
