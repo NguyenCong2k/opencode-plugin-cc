@@ -27,6 +27,7 @@ import { executeCliJob } from "./lib/execution.mjs";
 import { incident } from "./lib/incidents.mjs";
 import { killProcessTree } from "./lib/process.mjs";
 import { discoverProviders } from "./lib/providers.mjs";
+import { makeDigest } from "./lib/digest.mjs";
 
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(import.meta.dirname, "..");
 
@@ -273,83 +274,12 @@ async function handleStatus(argv) {
     console.log(JSON.stringify({ job: { id: job.id, status, pid: job.pid ?? null, agentPid: job.agentPid ?? null, lastOutputAt: job.lastOutputAt ?? null } }));
     return;
   }
-  // Auto-heal stuck jobs before building the snapshot so `status` never lies
-  // about completion. Safe on ECONNREFUSED (probe returns reachable:false).
-  const healable = (state.jobs ?? []).filter(
-    (j) => j.runtime !== "cli" && j.opencodeSessionId &&
-      ["starting", "investigating", "running", "finalizing"].includes(j.status),
-  );
-  if (healable.length > 0) {
-    await autoHealJobs(workspace, healable);
-    state = loadState(workspace);
-  }
-  const jobs = state.jobs ?? [];
-  const wantJson = !!options.json;
-  // --all widens the snapshot filter to every session's jobs; without --all we
-  // still filter to the current Claude session for the existing markdown UX.
-  const sessionFilter = options.all ? undefined : sessionId;
-  const ref = positional?.[0];
-
-  // Single-task query — `status <tid> [--json]`.
-  if (ref) {
-    const { job, ambiguous } = matchJobReference(jobs, ref);
-    if (ambiguous) {
-      if (wantJson) {
-        console.log(JSON.stringify({ workspaceRoot: workspace, job: null, error: "ambiguous" }));
-      } else {
-        console.error(`Ambiguous job reference "${ref}". Please provide a more specific ID prefix.`);
-      }
-      process.exit(ambiguous ? 2 : 0);
-      return;
-    }
-    if (wantJson) {
-      const enriched = job ? enrichJob(job, workspace) : null;
-      console.log(JSON.stringify({ workspaceRoot: workspace, job: enriched }));
-      return;
-    }
-    if (!job) {
-      console.log(`No job found for "${ref}" in workspace ${workspace}.`);
-      return;
-    }
-    console.log(renderStatus({ running: [], latestFinished: null, recent: [enrichJob(job, workspace)] }));
-    return;
-  }
-
-  const snapshot = buildStatusSnapshot(jobs, workspace, { sessionId: sessionFilter });
-
-  // Enrich running jobs with a live breadcrumb from the opencode session —
-  // gives newcomers a human-legible "running — bash: docker exec ..." line
-  // instead of a stale "investigating" phase from state.json. Runs in parallel
-  // and gracefully falls back if the server is unreachable.
-  if (snapshot.running.length > 0) {
-    await Promise.all(snapshot.running.map(async (job) => {
-      if (!job.opencodeSessionId) return;
-      const act = await getSessionLastActivity(null, job.opencodeSessionId);
-      if (!act) return;
-      const age = act.ageSec != null ? `${act.ageSec}s ago` : "";
-      if (act.kind === "tool") {
-        const head = act.command ? `: ${act.command}` : "";
-        job.breadcrumb = `running — ${act.tool}${head}${age ? ` (${age})` : ""}`.trim();
-      } else if (act.kind === "text") {
-        job.breadcrumb = `running — "${act.text}"${age ? ` (${age})` : ""}`;
-      }
-    }));
-  }
-
-  if (wantJson) {
-    // Machine-readable shape mirrors the single-task case so callers can treat
-    // both uniformly: a `.job` field is present for single-task, otherwise
-    // `.running`/`.recent` arrays describe the whole workspace snapshot.
-    console.log(JSON.stringify({
-      workspaceRoot: workspace,
-      running: snapshot.running,
-      latestFinished: snapshot.latestFinished,
-      recent: snapshot.recent,
-    }));
-    return;
-  }
-
-  console.log(renderStatus(snapshot));
+  const jobs = (state.jobs ?? []).filter((job) => options.all || !sessionId || job.sessionId === sessionId);
+  console.log(JSON.stringify({ jobs: jobs.map((job) => ({
+    id: job.id,
+    status: job.status === "completed" ? "done" : ["failed", "cancelled"].includes(job.status) ? "failed" : "running",
+    pid: job.pid ?? null, agentPid: job.agentPid ?? null, lastOutputAt: job.lastOutputAt ?? null,
+  })) }));
 }
 
 async function handleResult(argv) {
@@ -455,6 +385,7 @@ async function handleWaitAndResult(argv) {
   }
 
   const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+  incident(job.incidentLog, "timeout", `wait-and-result ${job.id}`, `Wait exceeded ${maxWait}s`, "Job remains running; poll status later");
   const timeoutOutput = {
     status: "running",
     elapsed: elapsedSec,
@@ -513,9 +444,12 @@ async function handleCancel(argv) {
     status: "failed",
     completedAt: new Date().toISOString(),
     errorMessage: "Canceled by user",
+    digest: makeDigest({ result: { error: "Canceled by user", exitCode: 130 }, logPath: jobLogPath(workspace, job.id), worktreePath: job.worktreePath, configChanges: job.configChanges }),
   });
+  const cancelled = loadState(workspace).jobs.find((j) => j.id === job.id).digest;
+  fs.writeFileSync(jobDataPath(workspace, job.id), JSON.stringify({ digest: cancelled }), "utf8");
 
-  console.log(`Canceled job: ${job.id}`);
+  console.log(JSON.stringify(cancelled));
 }
 
 // ------------------------------------------------------------------

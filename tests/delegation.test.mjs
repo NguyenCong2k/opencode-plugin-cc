@@ -17,6 +17,7 @@ else if(args[0]==='models') console.log('opencode-go/flash\\nopencode/flash');
 else if(args[0]==='run') {
  let input=''; for await(const chunk of process.stdin) input+=chunk;
  if(process.env.CAPTURE) fs.writeFileSync(process.env.CAPTURE,JSON.stringify({args,input,cwd:process.cwd(),pwd:process.env.PWD}));
+ if(process.env.SLOW_JOB) await new Promise(()=>setInterval(()=>{},1000));
  if(process.env.FAIL_PROVIDER) { console.log(JSON.stringify({type:'error',error:{message:'Policy budget exceeded'}})); process.exit(1); }
  fs.writeFileSync('hello.txt','hello');
  console.log(JSON.stringify({type:'tool_use',sessionID:'ses_fake',part:{id:'part1',type:'tool',tool:'shell',state:{status:'completed',input:{command:'git status'},metadata:{exit:0},output:'?? hello.txt'}}}));
@@ -76,5 +77,17 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
     assert.equal(failure.status, "failed");
     assert.match(failure.failures.join("\n"), /Policy budget exceeded/);
     assert.match(failure.failures.join("\n"), /opencode-go\/flash#max/);
+    const incidentFile = path.join(dir, "cancel-incidents.md");
+    const slowStart = await call(["task", "--background", "--incident-log", incidentFile, "slow"], { env: { ...env, SLOW_JOB: "1" } });
+    const slowId = JSON.parse(slowStart.stdout).jobId;
+    for (let i = 0; i < 100; i++) {
+      const slow = JSON.parse((await call(["status", slowId, "--json"])).stdout).job;
+      if (slow.agentPid) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const cancel = await call(["cancel", slowId]);
+    assert.equal(JSON.parse(cancel.stdout).status, "failed");
+    assert.equal(JSON.parse((await call(["result", slowId])).stdout).status, "failed");
+    assert.match(fs.readFileSync(incidentFile, "utf8"), /killed_process/);
   } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); }
 });

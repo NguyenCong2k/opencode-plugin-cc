@@ -5,7 +5,7 @@ import path from "node:path";
 import { ensureDir, appendLine } from "./fs.mjs";
 import { generateJobId, upsertJob, jobLogPath, jobDataPath, loadState } from "./state.mjs";
 import { commandContext } from "./process.mjs";
-import { makeDigest } from "./digest.mjs";
+import { makeDigest, collectTelemetry } from "./digest.mjs";
 import { incident, failureType } from "./incidents.mjs";
 
 const SESSION_ID_ENV = "OPENCODE_COMPANION_SESSION_ID";
@@ -73,6 +73,9 @@ export async function runTrackedJob(workspacePath, job, runner) {
     const current = loadState(workspacePath).jobs.find((j) => j.id === job.id);
     const digest = makeDigest({ result, commands, logPath: logFile, worktreePath: current?.worktreePath, configChanges: current?.configChanges });
     const payload = { ...result, digest };
+    for (const command of collectTelemetry(result.messages ?? result.raw).commands) {
+      if (command.exitCode !== null && command.exitCode !== 0) incident(job.incidentLog, "command_failed", command.command, digest.failures.join("\n") || `Exit code ${command.exitCode}`, "Agent command failed; retained in digest");
+    }
     for (const failure of digest.failures) incident(job.incidentLog, failureType(failure), job.id, failure, "Recorded in final digest");
 
     // Mark as completed
