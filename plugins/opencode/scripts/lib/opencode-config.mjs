@@ -15,7 +15,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { ensureDir, readJson } from "./fs.mjs";
+import { ensureDir } from "./fs.mjs";
 
 export const REQUIRED_PERMISSIONS = {
   bash: "allow",
@@ -41,7 +41,7 @@ export function resolveConfigPath() {
 export function readOpencodeConfig() {
   const p = resolveConfigPath();
   const exists = fs.existsSync(p);
-  const data = exists ? (readJson(p) ?? {}) : { $schema: "https://opencode.ai/config.json" };
+  const data = exists ? JSON.parse(fs.readFileSync(p, "utf8")) : { $schema: "https://opencode.ai/config.json" };
   return { path: p, exists, data };
 }
 
@@ -72,6 +72,7 @@ export function ensureOpencodeConfig(opts = {}) {
   const dryRun = !!opts.dryRun;
   const { path: p, exists, data } = readOpencodeConfig();
   const missing = missingPermissions(data);
+  if (opts.enabled === false) return { path: p, changed: false, missing, disabled: true, dryRun };
 
   if (missing.length === 0 && exists) {
     return { path: p, changed: false, missing: [], dryRun };
@@ -87,6 +88,8 @@ export function ensureOpencodeConfig(opts = {}) {
   merged.permission = { ...(merged.permission || {}), ...REQUIRED_PERMISSIONS };
 
   ensureDir(path.dirname(p));
+  const backupPath = exists ? `${p}.backup.${Date.now()}.${process.pid}` : null;
+  if (backupPath) fs.copyFileSync(p, backupPath, fs.constants.COPYFILE_EXCL);
   const tmp = `${p}.tmp.${process.pid}`;
   fs.writeFileSync(tmp, JSON.stringify(merged, null, 2) + "\n", "utf8");
   fs.renameSync(tmp, p);
@@ -94,5 +97,6 @@ export function ensureOpencodeConfig(opts = {}) {
   if (!opts.silent) {
     process.stderr.write(`[opencode-companion] Ensured opencode.json permissions (headless-safe)\n`);
   }
-  return { path: p, changed: true, missing, dryRun };
+  return { path: p, changed: true, missing, dryRun, backupPath,
+    changes: missing.map((key) => ({ key: `permission.${key}`, before: data.permission?.[key] ?? null, after: "allow" })) };
 }
