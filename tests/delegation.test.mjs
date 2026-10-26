@@ -40,6 +40,9 @@ it("background CLI jobs preserve model variant and stdin, isolate worktrees, exp
     const setup = await call(["setup", "--json"]);
     assert.equal(setup.exitCode, 0, setup.stderr);
     assert.deepEqual(JSON.parse(setup.stdout).providers, ["opencode-go", "opencode"]);
+    const configured = JSON.parse((await call(["setup", "--json", "--full-access", "true", "--repair-config", "false"])).stdout);
+    assert.equal(configured.userConfig.full_access, true);
+    assert.equal(configured.userConfig.repair_config, false);
     const prompt = 'a "b" & c | d % é tiếng Việt';
     const start = await call(["task", "--arguments-stdin"], { input: JSON.stringify(["--background", "--full-access", "--model", "opencode-go/flash#max", "--worktree", "test-job", "--incident-log", path.join(dir,"incidents.md"), prompt]) });
     assert.equal(start.exitCode, 0, start.stderr);

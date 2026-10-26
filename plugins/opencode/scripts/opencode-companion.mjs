@@ -190,10 +190,15 @@ async function handleDelegatedJob(type, argv) {
     fs.mkdirSync(path.dirname(requestFile), { recursive: true });
     fs.writeFileSync(requestFile, JSON.stringify(request), "utf8");
     upsertJob(workspace, { id: job.id, status: "queued", logFile, requestFile });
-    const child = spawnDetached(process.execPath, [path.join(PLUGIN_ROOT, "scripts", "opencode-companion.mjs"), "task-worker", "--workspace", workspace, "--job-id", job.id], { cwd: workspace, logFile });
-    await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
-    upsertJob(workspace, { id: job.id, pid: child.pid });
-    console.log(JSON.stringify({ jobId: job.id, status: "running", pid: child.pid, lastOutputAt: null, logPath: logFile }));
+    try {
+      const child = spawnDetached(process.execPath, [path.join(PLUGIN_ROOT, "scripts", "opencode-companion.mjs"), "task-worker", "--workspace", workspace, "--job-id", job.id], { cwd: workspace, logFile });
+      await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+      upsertJob(workspace, { id: job.id, pid: child.pid });
+      console.log(JSON.stringify({ jobId: job.id, status: "running", pid: child.pid, lastOutputAt: null, logPath: logFile }));
+    } catch (err) {
+      const failed = await runTrackedJob(workspace, job, async () => { throw err; });
+      console.log(JSON.stringify(failed.digest)); process.exitCode = 1;
+    }
     return;
   }
   const result = await runTrackedJob(workspace, job, (context) => executeCliJob(workspace, job, request, context, PLUGIN_ROOT));
