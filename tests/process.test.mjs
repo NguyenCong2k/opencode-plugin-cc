@@ -1,8 +1,21 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { runCommand } from "../plugins/opencode/scripts/lib/process.mjs";
+import { runCommand, resolveInvocation } from "../plugins/opencode/scripts/lib/process.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 describe("process", () => {
+  it("resolves npm launchers from Unicode PATH without lossy where.exe output", { skip: process.platform !== "win32" }, () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "launcher tiếng Việt "));
+    try {
+      fs.writeFileSync(path.join(dir, "entry.mjs"), "");
+      fs.writeFileSync(path.join(dir, "fake.cmd"), '"%dp0%\\entry.mjs" %*');
+      const result = resolveInvocation("fake", ["a & b"], { env: { PATH: dir } });
+      assert.equal(result.command, process.execPath);
+      assert.deepEqual(result.args, [path.join(dir, "entry.mjs"), "a & b"]);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
   it("roundtrips shell metacharacters and Vietnamese without a shell", async () => {
     const input = 'a "b" & c | d % é tiếng Việt';
     const result = await runCommand(process.execPath, ["-e", "process.stdout.write(process.argv[1])", input]);

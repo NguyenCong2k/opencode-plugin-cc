@@ -27,10 +27,11 @@ export function resolveInvocation(cmd, args = [], opts = {}) {
   if (!IS_WINDOWS) return { command: cmd, args };
   let executable = cmd;
   if (!path.isAbsolute(cmd)) {
-    const found = spawnSync("where.exe", [cmd], { encoding: "utf8", env: opts.env ?? process.env });
-    const candidates = (found.stdout || "").trim().split(/\r?\n/).filter(Boolean);
-    executable = candidates.find((p) => /\.exe$/i.test(p))
-      ?? candidates.find((p) => /\.cmd$/i.test(p)) ?? cmd;
+    const env = opts.env ?? process.env;
+    const searchPath = env.PATH ?? env.Path ?? "";
+    const names = path.extname(cmd) ? [cmd] : [cmd + ".exe", cmd + ".com", cmd + ".cmd", cmd + ".bat"];
+    const candidates = searchPath.split(path.delimiter).flatMap((directory) => names.map((name) => path.join(directory.replace(/^"|"$/g, ""), name)));
+    executable = candidates.find((file) => { try { return fs.statSync(file).isFile(); } catch { return false; } }) ?? cmd;
   }
   if (/\.(cmd|bat)$/i.test(executable)) {
     const source = fs.readFileSync(executable, "utf8");
@@ -60,6 +61,12 @@ export function runCommandSync(cmd, args, opts = {}) {
  * @returns {Promise<string|null>}
  */
 export async function resolveOpencodeBinary() {
+  if (IS_WINDOWS) {
+    try {
+      const { command } = resolveInvocation("opencode");
+      return fs.existsSync(command) ? command : null;
+    } catch { return null; }
+  }
   return new Promise((resolve) => {
     // `which` isn't a native Windows binary; `where` is the equivalent.
     const proc = spawn(IS_WINDOWS ? "where" : "which", ["opencode"], {
