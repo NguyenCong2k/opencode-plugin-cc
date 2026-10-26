@@ -71,7 +71,7 @@ export async function runTrackedJob(workspacePath, job, runner) {
     const result = await commandContext.run({ commands, incidentLog: job.incidentLog, log }, () => runner({ report, log }));
     log(JSON.stringify(result));
     const current = loadState(workspacePath).jobs.find((j) => j.id === job.id);
-    const digest = makeDigest({ result, commands, logPath: logFile, worktreePath: current?.worktreePath, configChanges: current?.configChanges });
+    const digest = makeDigest({ result, commands, jobType: job.type, logPath: logFile, worktreePath: current?.worktreePath, configChanges: current?.configChanges });
     const payload = { ...result, digest };
     for (const command of collectTelemetry(result.messages ?? result.raw).commands) {
       if (command.exitCode !== null && command.exitCode !== 0) incident(job.incidentLog, "command_failed", command.command, digest.failures.join("\n") || `Exit code ${command.exitCode}`, "Agent command failed; retained in digest");

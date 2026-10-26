@@ -38,12 +38,28 @@ export function collectTelemetry(value) {
   return { commands, failures: failures.slice(0, 40), tests, blocked, files: [...new Set(files)] };
 }
 
-export function makeDigest({ result = {}, error, commands = [], logPath, worktreePath, configChanges = [] }) {
+function assistantText(value) {
+  const texts = [];
+  function visit(node) {
+    if (!node || typeof node !== "object" || node.role === "user") return;
+    if (Array.isArray(node)) { node.forEach(visit); return; }
+    if (node.type === "text" && typeof node.text === "string") { texts.push(node.text); return; }
+    for (const key of ["part", "parts", "messages", "content"]) visit(node[key]);
+  }
+  if (typeof value === "string") {
+    for (const line of value.split(/\r?\n/)) { try { visit(JSON.parse(line)); } catch {} }
+  } else visit(value);
+  return texts.join("\n");
+}
+
+export function makeDigest({ result = {}, error, commands = [], logPath, worktreePath, configChanges = [], jobType }) {
   error ??= result.error ? new Error(result.error) : undefined;
   const telemetry = collectTelemetry(result.messages ?? result.raw ?? "");
   const failures = [...telemetry.failures, ...(error ? String(error.message ?? error).split(/\r?\n/) : [])].slice(0, 40);
   const blocked = telemetry.blocked || /permission|denied|approval|confirm|blocked|interactive/i.test(error?.message ?? "");
   const failedCommand = telemetry.commands.some((c) => c.exitCode !== null && c.exitCode !== 0);
+  const review = ["review", "adversarial-review"].includes(jobType)
+    ? assistantText(result.messages ?? result.raw) || result.rendered || "" : null;
   return {
     status: blocked ? "blocked" : error && result.exitCode === undefined ? "error" : error || failures.length || failedCommand ? "failed" : "passed",
     filesChanged: result.changedFiles ?? [],
@@ -52,5 +68,6 @@ export function makeDigest({ result = {}, error, commands = [], logPath, worktre
       failed: telemetry.tests.filter((t) => t.exitCode !== null && t.exitCode !== 0).length,
       unknown: telemetry.tests.filter((t) => t.exitCode === null).length },
     failures, logPath, worktreePath: worktreePath ?? null, configChanges,
+    ...(review !== null ? { reviewOutput: review.slice(0, 8000), reviewOutputTruncated: review.length > 8000 } : {}),
   };
 }

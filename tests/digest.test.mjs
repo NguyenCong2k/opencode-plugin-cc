@@ -6,6 +6,27 @@ import path from "node:path";
 import { makeDigest, collectTelemetry } from "../plugins/opencode/scripts/lib/digest.mjs";
 import { createJobRecord, runTrackedJob } from "../plugins/opencode/scripts/lib/tracked-jobs.mjs";
 
+it("review digests retain bounded assistant findings and verdict", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-digest-"));
+  const old = process.env.OPENCODE_COMPANION_DATA;
+  process.env.OPENCODE_COMPANION_DATA = dir;
+  try {
+    for (const type of ["review", "adversarial-review"]) {
+      const text = JSON.stringify({ verdict: "needs-attention", findings: [{ file: "api.js", line: 12, severity: "high", body: "Null input crashes" }] });
+      const result = await runTrackedJob(dir, createJobRecord(dir, type), async () => ({ messages: JSON.stringify({ type: "text", part: { type: "text", text } }) }));
+      assert.equal(result.digest.reviewOutput, text);
+      assert.equal(result.digest.reviewOutputTruncated, false);
+    }
+    const large = makeDigest({ jobType: "review", result: { messages: [{ role: "user", parts: [{ type: "text", text: "secret prompt" }] }, { role: "assistant", parts: [{ type: "text", text: "x".repeat(10000) }] }] } });
+    assert.equal(large.reviewOutput.length, 8000);
+    assert.equal(large.reviewOutputTruncated, true);
+    assert.equal(makeDigest({ result: { rendered: "task text" } }).reviewOutput, undefined);
+  } finally {
+    if (old === undefined) delete process.env.OPENCODE_COMPANION_DATA; else process.env.OPENCODE_COMPANION_DATA = old;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 it("digest extracts commands and exit codes, bounds failures and distinguishes blocked", () => {
   const result = { changedFiles: ["hello.txt"], raw: { parts: [{ type: "tool", tool: "shell", state: { input: { command: "npm test" }, metadata: { exit: 7 }, error: Array(80).fill("original failure").join("\n") } }] } };
   const digest = makeDigest({ result, logPath: "full.log" });
