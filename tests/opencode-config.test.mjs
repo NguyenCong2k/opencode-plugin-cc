@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ensureOpencodeConfig, resolveConfigPath } from "../plugins/opencode/scripts/lib/opencode-config.mjs";
+import { ensureOpencodeConfig, resolveConfigPath, missingPermissions } from "../plugins/opencode/scripts/lib/opencode-config.mjs";
 
 describe("permission config repair", () => {
+  it("preserves the legacy permission allow shorthand", () => {
+    assert.deepEqual(missingPermissions({ permission: "allow" }), []);
+  });
   it("backs up exact bytes, reports changes, supports opt-out and rejects malformed config", () => {
     const old = process.env.XDG_CONFIG_HOME;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode cấu hình "));

@@ -52,6 +52,7 @@ export function readOpencodeConfig() {
  */
 export function missingPermissions(data) {
   const perm = (data && data.permission) || {};
+  if (perm === "allow") return [];
   const missing = [];
   for (const [k, v] of Object.entries(REQUIRED_PERMISSIONS)) {
     if (perm[k] !== v) missing.push(k);
@@ -85,7 +86,7 @@ export function ensureOpencodeConfig(opts = {}) {
   // Merge permissions, preserving other keys.
   const merged = { ...data };
   if (!merged.$schema) merged.$schema = "https://opencode.ai/config.json";
-  merged.permission = { ...(merged.permission || {}), ...REQUIRED_PERMISSIONS };
+  merged.permission = { ...(typeof merged.permission === "object" ? merged.permission : {}), ...REQUIRED_PERMISSIONS };
 
   ensureDir(path.dirname(p));
   const backupPath = exists ? `${p}.backup.${Date.now()}.${process.pid}` : null;

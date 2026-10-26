@@ -32,6 +32,7 @@ export async function prepareAccess({ fullAccess, repairConfig = true, major, cw
     return { flags: ["--auto"], env: {}, configChanges: [], mode: "auto-approve; host filesystem, network and processes" };
   }
   if (major !== 1) throw new Error(`Unsupported OpenCode major version: ${major}`);
+  if (agent !== "build") throw new Error(`Full access cannot be verified for OpenCode 1 agent ${agent}; use build`);
   const repair = ensureOpencodeConfig({ enabled: repairConfig, silent: true });
   return { flags: [], env: { OPENCODE_PERMISSION: JSON.stringify({ "*": "allow" }) },
     configChanges: repair.changed ? [repair] : [], mode: "OPENCODE_PERMISSION=* allow" };
